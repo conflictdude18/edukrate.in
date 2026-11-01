@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/notes-import",
+      "schedule": "30 1 * * *"
+    }
+  ]
+}
