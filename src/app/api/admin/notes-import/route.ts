@@ -231,10 +231,7 @@ const result = await extractText(new Uint8Array(buffer), {
 mergePages: true,
 });
 
-const rawText =
-typeof result.text === "string"
-? result.text
-: result.text.join("\n\n");
+const rawText = String(result.text ?? "");
 
 const content = cleanText(rawText).slice(
 0,

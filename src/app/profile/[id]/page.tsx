@@ -490,7 +490,7 @@ export default function PublicProfilePage() {
                   <IdentityRow
                     icon={<TrendingUp size={17} />}
                     label="Creator score"
-                    value={formatNumber(creatorScore)}
+                    value={String(formatNumber(creatorScore))}
                   />
                   <IdentityRow
                     icon={<CalendarDays size={17} />}

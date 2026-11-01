@@ -11,6 +11,7 @@ import { db } from "@/firebase/firebase";
 import { Video } from "@/types/video";
 
 export async function getVideos(): Promise<Video[]> {
+  
   try {
     const q = query(
       collection(db, "videos"),

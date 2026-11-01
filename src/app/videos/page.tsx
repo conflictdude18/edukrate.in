@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import VideoCard from "@/components/videos/VideoCard";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { getVideos } from "@/lib/videos";
-import type { Video } from "@/lib/videos";
+import type { Video } from "@/types/video";
 import {
   Search,
   SlidersHorizontal,

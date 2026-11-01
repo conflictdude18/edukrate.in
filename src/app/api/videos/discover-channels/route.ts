@@ -53,8 +53,11 @@ export async function GET() {
       await searchEducationalChannels(term);
 
     for (const item of channels) {
-      const channelId =
-        item.id.channelId;
+      const channelId = item.id?.channelId;
+
+      if (!channelId) {
+        continue;
+      }
 
       const existing =
         await adminDb
@@ -74,10 +77,10 @@ export async function GET() {
       }
 
       const title =
-        details.snippet.title;
+        details.snippet?.title || "";
 
       const description =
-        details.snippet.description;
+        details.snippet?.description || "";
 
       const subscribers = Number(
         details.statistics?.subscriberCount || 0
@@ -116,20 +119,15 @@ export async function GET() {
           description,
 
           thumbnail:
-            details.snippet.thumbnails
-              .high?.url,
+            details.snippet?.thumbnails?.high?.url || "",
 
-          subscriberCount:
-            Number(
-              details.statistics
-                .subscriberCount || 0
-            ),
-
-          videoCount:
-            Number(
-              details.statistics
-                .videoCount || 0
-            ),
+          subscriberCount: Number(
+            details.statistics?.subscriberCount || 0
+          ),
+          
+          videoCount: Number(
+            details.statistics?.videoCount || 0
+          ),
 
           verified: true,
 

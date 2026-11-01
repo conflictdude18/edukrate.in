@@ -58,28 +58,27 @@ export async function GET() {
       );
 
       for (const video of videos) {
-        const youtubeId =
-          video.id?.videoId;
+        const youtubeId = video.videoId;
 
         if (!youtubeId) continue;
 
         const isStudy = classifyVideo(
-          video.snippet?.title || "",
-          video.snippet?.description || ""
+          video.title || "",
+          video.description || ""
         );
 
         if (!isStudy) {
-          console.log(
-            "REJECTED BY CLASSIFIER:",
-            video.snippet?.title
-          );
+        console.log(
+          "REJECTED BY CLASSIFIER:",
+          video.title
+        );
 
           continue;
         }
 
         console.log(
           "ACCEPTED BY CLASSIFIER:",
-          video.snippet?.title
+          video.title
         );
 
         const existing =
@@ -103,19 +102,16 @@ export async function GET() {
             youtubeId,
 
             title:
-              video.snippet?.title || "",
+              video.title || "",
 
             description:
-              video.snippet?.description || "",
+              video.description || "",
 
-            thumbnailUrl:
-              video.snippet?.thumbnails?.high?.url || "",
+            thumbnailUrl: video.thumbnail || "",
 
-            channelName:
-              video.snippet?.channelTitle || "",
+            channelName: "",
 
-            publishedAt:
-              video.snippet?.publishedAt || null,
+            publishedAt: video.publishedAt || null,
 
             approved: true,
 
@@ -135,7 +131,7 @@ export async function GET() {
 
         console.log(
           "IMPORTED:",
-          video.snippet?.title
+          video.title
         );
       }
     }
