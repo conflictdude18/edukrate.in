@@ -1,10 +1,17 @@
-"use client";
 
+"use client";
+import {
+  query,
+  where,
+} from "firebase/firestore";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import {
+  ArrowDownWideNarrow,
+  BookOpen,
+  Check,
   Download,
   Eye,
   FileText,
@@ -30,6 +37,7 @@ export default function BrowseNotesPage() {
 
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const [classFilter, setClassFilter] = useState("");
@@ -39,30 +47,47 @@ export default function BrowseNotesPage() {
   const [sortBy, setSortBy] = useState<SortOption>("latest");
   const [search, setSearch] = useState("");
 
-  async function fetchNotes() {
-    setLoading(true);
+  async function fetchNotes(isRefresh = false) {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
 
     try {
-      const snap = await getDocs(collection(db, "notes"));
+      const approvedNotesQuery = query(
+        collection(db, "notes"),
+        where("status", "==", "approved")
+      );
 
-      const data: Note[] = snap.docs
-        .map((document) => ({
-          id: document.id,
-          ...(document.data() as Omit<Note, "id">),
-        }))
-        .filter((note) => note.status === "approved");
+      const snap = await getDocs(approvedNotesQuery);
+
+      const data: Note[] = snap.docs.map((document) => ({
+        id: document.id,
+        ...(document.data() as Omit<Note, "id">),
+      }));
 
       setNotes(data);
-    } catch (err) {
-      console.error("Error fetching notes:", err);
+    } catch (error) {
+      console.error("Error fetching notes:", error);
       toast.error("Failed to load notes.");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }
 
   useEffect(() => {
     fetchNotes();
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const subject = params.get("subject");
+
+    if (subject) {
+      setSubjectFilter(subject.trim());
+    }
   }, []);
 
   const subjects = useMemo(
@@ -72,9 +97,9 @@ export default function BrowseNotesPage() {
 
   const classes = useMemo(
     () =>
-      getUniqueValues(notes.map((note) => normalizeClassName(note.class))).sort(
-        (a, b) => Number(a) - Number(b)
-      ),
+      getUniqueValues(
+        notes.map((note) => normalizeClassName(note.class))
+      ).sort((a, b) => Number(a) - Number(b)),
     [notes]
   );
 
@@ -89,10 +114,10 @@ export default function BrowseNotesPage() {
   );
 
   const filteredNotes = useMemo(() => {
-    const normalizedClassFilter = normalizeText(classFilter);
-    const normalizedSubjectFilter = normalizeText(subjectFilter);
-    const normalizedBoardFilter = normalizeText(boardFilter);
-    const normalizedTypeFilter = normalizeText(typeFilter);
+    const normalizedClass = normalizeText(classFilter);
+    const normalizedSubject = normalizeText(subjectFilter);
+    const normalizedBoard = normalizeText(boardFilter);
+    const normalizedType = normalizeText(typeFilter);
     const normalizedSearch = normalizeText(search);
 
     const result = notes.filter((note) => {
@@ -116,10 +141,10 @@ export default function BrowseNotesPage() {
         .toLowerCase();
 
       return (
-        (!normalizedClassFilter || noteClass === normalizedClassFilter) &&
-        (!normalizedSubjectFilter || noteSubject === normalizedSubjectFilter) &&
-        (!normalizedBoardFilter || noteBoard === normalizedBoardFilter) &&
-        (!normalizedTypeFilter || noteType === normalizedTypeFilter) &&
+        (!normalizedClass || noteClass === normalizedClass) &&
+        (!normalizedSubject || noteSubject === normalizedSubject) &&
+        (!normalizedBoard || noteBoard === normalizedBoard) &&
+        (!normalizedType || noteType === normalizedType) &&
         (!normalizedSearch || searchableText.includes(normalizedSearch))
       );
     });
@@ -153,75 +178,136 @@ export default function BrowseNotesPage() {
     setTypeFilter("");
     setSortBy("latest");
     setFiltersOpen(false);
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete("subject");
+
+    window.history.replaceState(
+      {},
+      "",
+      url.pathname + url.search + url.hash
+    );
+  }
+
+  function selectSubject(subject: string) {
+    setSubjectFilter(subject);
+
+    const url = new URL(window.location.href);
+
+    if (subject) {
+      url.searchParams.set("subject", subject);
+    } else {
+      url.searchParams.delete("subject");
+    }
+
+    window.history.replaceState(
+      {},
+      "",
+      url.pathname + url.search + url.hash
+    );
   }
 
   return (
-    <div className="space-y-5 pb-24">
-      <section className="flex items-end justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-xs font-black uppercase tracking-[0.28em] text-red-400">
-            Browse Notes
-          </p>
+    <main className="w-full min-w-0 space-y-6 pb-24 text-[var(--foreground)]">
 
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl lg:text-5xl">
-            Community Library
-          </h1>
+      {/* Page heading */}
+      <section className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-7 lg:p-9">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-red-600/[0.06] blur-3xl" />
 
-          <p className="mt-2 text-sm text-white/50">
-            {filteredNotes.length} notes • {subjects.length} subjects •{" "}
-            {classes.length} classes
-          </p>
+        <div className="relative flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-red-500">
+              <BookOpen size={15} />
+              Edukrate Library
+            </div>
+
+            <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
+              Browse Notes
+            </h1>
+
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)] sm:text-base">
+              Explore community-shared notes, revision material and
+              study resources. Find what you need and keep learning.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:min-w-[390px]">
+            <OverviewStat
+              icon={<FileText size={17} />}
+              value={notes.length}
+              label="Notes"
+            />
+            <OverviewStat
+              icon={<Layers size={17} />}
+              value={subjects.length}
+              label="Subjects"
+            />
+            <OverviewStat
+              icon={<BookOpen size={17} />}
+              value={classes.length}
+              label="Classes"
+            />
+          </div>
         </div>
-
-        <button
-          type="button"
-          onClick={fetchNotes}
-          className="flex h-11 shrink-0 items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-xs font-black text-white/70 transition hover:border-red-500/30 hover:text-white"
-        >
-          <RefreshCw size={15} />
-          <span className="hidden sm:inline">Refresh</span>
-        </button>
       </section>
 
-      <section className="sticky top-2 z-20 rounded-3xl border border-white/10 bg-[#080808]/95 p-3 shadow-2xl shadow-black/30 backdrop-blur-xl">
+      {/* Search and filters */}
+      <section className="sticky top-2 z-20 rounded-2xl border border-[var(--border)] bg-[var(--background)]/95 p-3 shadow-xl shadow-black/10 backdrop-blur-xl sm:p-4">
         <div className="flex gap-2">
-          <div className="relative flex-1">
+          <div className="relative min-w-0 flex-1">
             <Search
               size={18}
-              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/35"
+              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]"
             />
 
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search notes, chapters, subjects..."
-              className="h-12 w-full rounded-2xl border border-white/10 bg-[#050505] px-4 pl-11 pr-10 text-sm font-semibold text-white outline-none placeholder:text-white/35 focus:border-red-500/40"
+              className="h-12 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] pl-11 pr-11 text-sm font-semibold text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-red-500/50"
             />
 
-            {hasFilters && (
+            {search && (
               <button
                 type="button"
-                onClick={clearFilters}
-                className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-xl bg-white/10 text-white/60 transition hover:bg-red-500 hover:text-white"
-                aria-label="Clear filters"
+                onClick={() => setSearch("")}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[var(--muted)] transition hover:bg-red-500/10 hover:text-red-500"
               >
-                <X size={15} />
+                <X size={16} />
               </button>
             )}
           </div>
 
           <button
             type="button"
-            onClick={() => setFiltersOpen((prev) => !prev)}
-            className="flex h-12 shrink-0 items-center gap-2 rounded-2xl border border-white/10 bg-[#050505] px-4 text-xs font-black text-white/70 md:hidden"
+            onClick={() => setFiltersOpen((previous) => !previous)}
+            aria-expanded={filtersOpen}
+            className="flex h-12 shrink-0 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 text-sm font-bold text-[var(--foreground)] transition hover:border-red-500/40 md:hidden"
           >
-            <SlidersHorizontal size={16} />
-            Filters
+            <SlidersHorizontal size={17} />
+            <span>Filters</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => fetchNotes(true)}
+            disabled={refreshing}
+            aria-label="Refresh notes"
+            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--muted)] transition hover:border-red-500/40 hover:text-red-500 disabled:opacity-50 sm:w-auto sm:px-4"
+          >
+            <RefreshCw
+              size={17}
+              className={refreshing ? "animate-spin" : ""}
+            />
+            <span className="ml-2 hidden text-xs font-bold sm:inline">
+              Refresh
+            </span>
           </button>
         </div>
 
-        <div className={`${filtersOpen ? "block" : "hidden"} mt-3 md:block`}>
-          <div className="grid gap-3 md:grid-cols-5">
+        <div className={`${filtersOpen ? "block" : "hidden"} mt-4 md:block`}>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <FilterSelect
               label="Class"
               value={classFilter}
@@ -236,7 +322,7 @@ export default function BrowseNotesPage() {
             <FilterSelect
               label="Subject"
               value={subjectFilter}
-              onChange={setSubjectFilter}
+              onChange={selectSubject}
               options={subjects}
               placeholder="All Subjects"
             />
@@ -258,9 +344,9 @@ export default function BrowseNotesPage() {
             />
 
             <div>
-              <label className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
-                <Sparkles size={13} />
-                Sort
+              <label className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">
+                <ArrowDownWideNarrow size={13} />
+                Sort by
               </label>
 
               <select
@@ -268,176 +354,268 @@ export default function BrowseNotesPage() {
                 onChange={(event) =>
                   setSortBy(event.target.value as SortOption)
                 }
-                className="h-11 w-full rounded-2xl border border-white/10 bg-[#050505] px-3 text-xs font-bold text-white outline-none focus:border-red-500/40"
+                className="h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-bold text-[var(--foreground)] outline-none focus:border-red-500/50"
               >
-                <option value="latest" className="bg-[#050505]">
-                  Latest
-                </option>
-                <option value="downloads" className="bg-[#050505]">
-                  Most Downloaded
-                </option>
-                <option value="likes" className="bg-[#050505]">
-                  Most Liked
-                </option>
-                <option value="views" className="bg-[#050505]">
-                  Most Viewed
-                </option>
+                <option value="latest">Latest added</option>
+                <option value="downloads">Most downloaded</option>
+                <option value="likes">Most liked</option>
+                <option value="views">Most viewed</option>
               </select>
             </div>
           </div>
+        </div>
 
-          <div className="no-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
+        {/* Subject shortcuts */}
+        <div className="mt-4 border-t border-[var(--border)] pt-3">
+          <div className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">
+            <Sparkles size={13} />
+            Explore subjects
+          </div>
+
+          <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
             <Chip
-              label="All"
+              label="All subjects"
               active={!subjectFilter}
-              onClick={() => setSubjectFilter("")}
+              onClick={() => selectSubject("")}
             />
 
-            {subjects.slice(0, 12).map((subject) => (
+            {subjects.slice(0, 15).map((subject) => (
               <Chip
                 key={subject}
                 label={subject}
-                active={normalizeText(subjectFilter) === normalizeText(subject)}
-                onClick={() => setSubjectFilter(subject)}
+                active={
+                  normalizeText(subjectFilter) === normalizeText(subject)
+                }
+                onClick={() => selectSubject(subject)}
               />
             ))}
           </div>
         </div>
+
+        {hasFilters && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
+            <p className="text-xs text-[var(--muted)]">
+              Showing results with your selected filters.
+            </p>
+
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="inline-flex items-center gap-1.5 text-xs font-black text-red-500 transition hover:text-red-400"
+            >
+              <X size={14} />
+              Clear all filters
+            </button>
+          </div>
+        )}
       </section>
 
-      {loading && (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, index) => (
-            <NoteCardSkeleton key={index} />
-          ))}
-        </div>
-      )}
-
-      {!loading && filteredNotes.length === 0 && (
-        <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-8 text-center sm:p-12">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10 text-red-300">
-            <FileText size={32} />
-          </div>
-
-          <h2 className="mt-5 text-2xl font-black">No notes found</h2>
-
-          <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-white/55">
-            Try changing your search, class, subject, board or type filter.
-          </p>
-
-          {hasFilters && (
-            <button type="button" onClick={clearFilters} className="btn-primary mt-6">
-              <X size={17} />
-              Clear Filters
-            </button>
-          )}
-        </div>
-      )}
-
-      {!loading && filteredNotes.length > 0 && (
-        <section>
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-red-300">
-                <Sparkles size={14} />
-                Library
-              </p>
-
-              <h2 className="mt-1 text-2xl font-black">Available Notes</h2>
+      {/* Results heading */}
+      <section>
+        <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-red-500">
+              <Sparkles size={14} />
+              Community collection
             </div>
 
-            <p className="text-right text-xs font-semibold text-white/45 sm:text-sm">
-              {filteredNotes.length} of {notes.length}
+            <h2 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">
+              Available Notes
+            </h2>
+
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              {loading
+                ? "Finding study resources..."
+                : `${filteredNotes.length} notes matching your search`}
             </p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {filteredNotes.map((note) => (
-              <Link
-                key={note.id}
-                href={user ? `/notes/${note.id}` : "/signin"}
-                className="group overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] transition hover:border-red-500/35 hover:bg-white/[0.06]"
-              >
-                <div className="grid grid-cols-[96px_1fr] md:block">
-                  <div className="relative min-h-[138px] overflow-hidden border-r border-white/10 bg-[#050505] md:h-44 md:border-b md:border-r-0">
-                    {note.thumbnailUrl ? (
-                      <Image
-                        src={note.thumbnailUrl}
-                        alt={note.title || "Note thumbnail"}
-                        fill
-                        sizes="(max-width: 768px) 96px, (max-width: 1280px) 50vw, 25vw"
-                        className="object-cover transition duration-300 group-hover:scale-105"
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center bg-[#080808]">
-                        <FileText size={30} className="text-red-400" />
-                      </div>
-                    )}
-                  </div>
+          {!loading && (
+            <div className="flex items-center gap-2 self-start rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-bold text-[var(--muted)] sm:self-auto">
+              <FileText size={14} />
+              {filteredNotes.length} / {notes.length} results
+            </div>
+          )}
+        </div>
 
-                  <div className="min-w-0 p-3.5 sm:p-4">
-                    <div className="mb-2 flex flex-wrap gap-1.5">
-                      <span className="line-clamp-1 rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[10px] font-bold text-red-200">
-                        {note.subject || "General"}
-                      </span>
-
-                      <span className="rounded-full border border-white/10 bg-black/25 px-2 py-0.5 text-[10px] font-semibold text-white/55">
-                        {formatClassLabel(note.class)}
-                      </span>
-
-                      {note.board && (
-                        <span className="rounded-full border border-white/10 bg-black/25 px-2 py-0.5 text-[10px] font-semibold text-white/55">
-                          {note.board}
-                        </span>
-                      )}
-
-                      {note.type && (
-                        <span className="rounded-full border border-white/10 bg-black/25 px-2 py-0.5 text-[10px] font-semibold text-white/55">
-                          {note.type}
-                        </span>
-                      )}
-                    </div>
-
-                    <h3 className="line-clamp-2 text-sm font-black leading-snug transition group-hover:text-red-300 sm:text-base">
-                      {note.title || "Untitled Note"}
-                    </h3>
-
-                    <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-white/45">
-                      {note.description || note.topic || "No description added."}
-                    </p>
-
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5 text-xs font-semibold text-white/40">
-                        <span className="flex items-center gap-1">
-                          <Download size={13} />
-                          {getDownloads(note)}
-                        </span>
-
-                        <span className="flex items-center gap-1">
-                          <Heart size={13} />
-                          {getNumber(note.likes)}
-                        </span>
-
-                        <span className="flex items-center gap-1">
-                          <Eye size={13} />
-                          {getNumber(note.views)}
-                        </span>
-                      </div>
-
-                      <div className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-1.5 text-[10px] font-black text-black transition group-hover:bg-red-500 group-hover:text-white">
-                        {user ? "View" : "Login"}
-                        <Layers size={12} />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </Link>
+        {/* Loading */}
+        {loading && (
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <NoteCardSkeleton key={index} />
             ))}
           </div>
-        </section>
-      )}
+        )}
+
+        {/* Empty state */}
+        {!loading && filteredNotes.length === 0 && (
+          <div className="rounded-3xl border border-[var(--border)] bg-[var(--card)] px-5 py-16 text-center sm:px-10">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10 text-red-500">
+              <FileText size={30} />
+            </div>
+
+            <h2 className="mt-5 text-2xl font-black">
+              No notes found
+            </h2>
+
+            <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-[var(--muted)]">
+              We couldn't find notes matching your current search.
+              Try another keyword or adjust your filters.
+            </p>
+
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="mt-6 inline-flex h-11 items-center gap-2 rounded-xl bg-red-600 px-5 text-sm font-black text-white transition hover:bg-red-500"
+              >
+                <X size={16} />
+                Clear filters
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Notes grid */}
+        {!loading && filteredNotes.length > 0 && (
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+            {filteredNotes.map((note) => (
+              <NoteCard
+                key={note.id}
+                note={note}
+                href={user ? `/notes/${note.id}` : "/signin"}
+                isLoggedIn={Boolean(user)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+    </main>
+  );
+}
+
+/* -------------------- Components -------------------- */
+
+function OverviewStat({
+  icon,
+  value,
+  label,
+}: {
+  icon: React.ReactNode;
+  value: number;
+  label: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--background)]/70 p-3 sm:p-4">
+      <div className="flex items-center gap-2 text-red-500">
+        {icon}
+        <span className="truncate text-[10px] font-bold uppercase tracking-wide text-[var(--muted)] sm:text-xs">
+          {label}
+        </span>
+      </div>
+
+      <p className="mt-2 text-xl font-black tabular-nums sm:text-2xl">
+        {value.toLocaleString()}
+      </p>
     </div>
   );
+}
+
+function NoteCard({
+  note,
+  href,
+  isLoggedIn,
+}: {
+  note: Note;
+  href: string;
+  isLoggedIn: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] transition duration-200 hover:-translate-y-1 hover:border-red-500/40 hover:shadow-xl hover:shadow-black/10"
+    >
+      {/* Thumbnail */}
+      <div className="relative h-48 overflow-hidden bg-[var(--card-soft)] sm:h-52 lg:h-56">
+        {note.thumbnailUrl ? (
+          <Image
+            src={note.thumbnailUrl}
+            alt={note.title || "Note thumbnail"}
+            fill
+            sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 25vw"
+            className="object-cover transition duration-500 group-hover:scale-105"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center">
+            <FileText size={42} className="text-[var(--muted)]" />
+          </div>
+        )}
+
+        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/65 to-transparent" />
+
+        <div className="absolute bottom-3 left-3 flex flex-wrap gap-1.5">
+          <span className="rounded-full border border-white/15 bg-black/65 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">
+            {formatClassLabel(note.class)}
+          </span>
+
+          {note.type && (
+            <span className="rounded-full border border-white/15 bg-black/65 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">
+              {note.type}
+            </span>
+          )}
+        </div>
+
+        <div className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/65 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">
+          {note.board || "Community"}
+        </div>
+      </div>
+
+      {/* Card content */}
+      <div className="flex flex-1 flex-col p-4">
+        <div className="mb-2">
+          <span className="inline-flex max-w-full items-center rounded-md bg-red-500/10 px-2.5 py-1 text-[10px] font-black text-red-500">
+            <span className="truncate">{note.subject || "General"}</span>
+          </span>
+        </div>
+
+        <h3 className="line-clamp-2 min-h-[2.75rem] text-base font-black leading-snug transition group-hover:text-red-500">
+          {note.title || "Untitled Note"}
+        </h3>
+
+        <p className="mt-2 line-clamp-2 min-h-10 text-xs leading-5 text-[var(--muted)]">
+          {note.description || note.topic || "No description added."}
+        </p>
+
+        <div className="mt-auto flex items-center justify-between gap-2 border-t border-[var(--border)] pt-3">
+          <div className="flex min-w-0 items-center gap-3 text-xs font-semibold text-[var(--muted)]">
+            <span className="flex items-center gap-1">
+              <Download size={13} />
+              {getDownloads(note)}
+            </span>
+
+            <span className="flex items-center gap-1">
+              <Heart size={13} />
+              {getNumber(note.likes)}
+            </span>
+
+            <span className="flex items-center gap-1">
+              <Eye size={13} />
+              {getNumber(note.views)}
+            </span>
+          </div>
+
+          <span className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--foreground)] px-3 py-2 text-[10px] font-black text-[var(--background)] transition group-hover:bg-red-600 group-hover:text-white">
+            {isLoggedIn ? "View note" : "Login"}
+            <ArrowRightIcon />
+          </span>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+function ArrowRightIcon() {
+  return <span aria-hidden="true">→</span>;
 }
 
 function FilterSelect({
@@ -456,8 +634,8 @@ function FilterSelect({
   formatOption?: (value: string) => string;
 }) {
   return (
-    <div>
-      <label className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
+    <div className="min-w-0">
+      <label className="mb-2 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">
         <SlidersHorizontal size={13} />
         {label}
       </label>
@@ -465,14 +643,12 @@ function FilterSelect({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-11 w-full rounded-2xl border border-white/10 bg-[#050505] px-3 text-xs font-bold text-white outline-none focus:border-red-500/40"
+        className="h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-bold text-[var(--foreground)] outline-none transition focus:border-red-500/50"
       >
-        <option value="" className="bg-[#050505]">
-          {placeholder}
-        </option>
+        <option value="">{placeholder}</option>
 
         {options.map((option) => (
-          <option key={option} value={option} className="bg-[#050505]">
+          <option key={option} value={option}>
             {formatOption ? formatOption(option) : option}
           </option>
         ))}
@@ -496,14 +672,17 @@ function Chip({
       onClick={onClick}
       className={
         active
-          ? "whitespace-nowrap rounded-full bg-red-600 px-4 py-2 text-xs font-black text-white"
-          : "whitespace-nowrap rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-bold text-white/60 transition hover:border-red-500/25 hover:text-white"
+          ? "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-red-600 px-4 py-2 text-xs font-black text-white"
+          : "inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-xs font-bold text-[var(--muted)] transition hover:border-red-500/40 hover:text-[var(--foreground)]"
       }
     >
+      {active && <Check size={12} />}
       {label}
     </button>
   );
 }
+
+/* -------------------- Helpers -------------------- */
 
 function getUniqueValues(values: Array<string | undefined>) {
   const map = new Map<string, string>();
@@ -541,7 +720,7 @@ function formatClassLabel(value?: string) {
 }
 
 function getNumber(value: unknown) {
-  return typeof value === "number" ? value : 0;
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function getDownloads(note: Note) {
@@ -558,6 +737,15 @@ function getCreatedTime(value: unknown) {
     typeof value.toDate === "function"
   ) {
     return value.toDate().getTime();
+  }
+
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "seconds" in value &&
+    typeof value.seconds === "number"
+  ) {
+    return value.seconds * 1000;
   }
 
   if (typeof value === "string") {

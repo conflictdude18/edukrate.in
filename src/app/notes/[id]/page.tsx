@@ -1,10 +1,13 @@
+
 "use client";
 
 import AISummaryCard from "@/components/AISummaryCard";
+import PDFViewer from "@/components/PDFViewer";
+import UserAvatar from "@/components/UserAvatar";
+import { useAuth } from "@/contexts/AuthContext";
+import { db } from "@/firebase/firebase";
 import { sendNotification } from "@/lib/sendNotification";
-import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import type { Note } from "@/types/note";
 import {
   addDoc,
   collection,
@@ -21,8 +24,8 @@ import {
   AlertTriangle,
   ArrowLeft,
   Bookmark,
+  CheckCircle2,
   Download,
-  ExternalLink,
   FileText,
   Heart,
   Loader2,
@@ -31,14 +34,10 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-
-import { db } from "@/firebase/firebase";
-import { useAuth } from "@/contexts/AuthContext";
-import UserAvatar from "@/components/UserAvatar";
-import type { Note } from "@/types/note";
-
-import PDFViewer from "@/components/PDFViewer";
 
 type Comment = {
   id: string;
@@ -50,6 +49,14 @@ type Comment = {
   createdAt: string;
 };
 
+const cardClass =
+  "rounded-3xl border border-[var(--border)] bg-[var(--card)]";
+
+const mutedText = "text-[var(--muted)]";
+
+const inputClass =
+  "w-full rounded-2xl border border-[var(--border)] bg-[var(--card-soft)] px-4 py-3 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-red-500 focus:ring-2 focus:ring-red-500/10 disabled:cursor-not-allowed disabled:opacity-50";
+
 export default function NoteDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -57,7 +64,6 @@ export default function NoteDetailsPage() {
 
   const [note, setNote] = useState<Note | null>(null);
   const [loading, setLoading] = useState(true);
-  const [userData, setUserData] = useState<any>(null);
 
   const [bookmarkId, setBookmarkId] = useState<string | null>(null);
   const isBookmarked = Boolean(bookmarkId);
@@ -75,12 +81,18 @@ export default function NoteDetailsPage() {
   const [reportDetails, setReportDetails] = useState("");
   const [reporting, setReporting] = useState(false);
 
-  async function fetchComments() {
+  const trackedViewId = useRef<string | null>(null);
+
+  const fetchComments = useCallback(async () => {
     if (!id) return;
 
     try {
-      const q = query(collection(db, "comments"), where("noteId", "==", id));
-      const snap = await getDocs(q);
+      const commentsQuery = query(
+        collection(db, "comments"),
+        where("noteId", "==", id)
+      );
+
+      const snap = await getDocs(commentsQuery);
 
       const data: Comment[] = snap.docs
         .map((commentDoc) => ({
@@ -89,20 +101,22 @@ export default function NoteDetailsPage() {
         }))
         .sort(
           (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            new Date(b.createdAt).getTime() -
+            new Date(a.createdAt).getTime()
         );
 
       setComments(data);
     } catch (err) {
       console.error("COMMENTS FETCH ERROR:", err);
     }
-  }
+  }, [id]);
 
   useEffect(() => {
     async function fetchNote() {
       if (!id) return;
 
       setLoading(true);
+      setNote(null);
 
       try {
         const snap = await getDoc(doc(db, "notes", id));
@@ -117,7 +131,8 @@ export default function NoteDetailsPage() {
           ...(snap.data() as Omit<Note, "id">),
         });
       } catch (err) {
-        console.error(err);
+        console.error("NOTE FETCH ERROR:", err);
+        toast.error("Could not load this note.");
       } finally {
         setLoading(false);
       }
@@ -125,50 +140,33 @@ export default function NoteDetailsPage() {
 
     fetchNote();
     fetchComments();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, fetchComments]);
+
+  useEffect(() => {
+    async function increaseViews() {
+      if (!id || trackedViewId.current === id) return;
+
+      trackedViewId.current = id;
+
+      try {
+        await updateDoc(doc(db, "notes", id), {
+          views: increment(1),
+        });
+      } catch (err) {
+        console.error("VIEW UPDATE ERROR:", err);
+      }
+    }
+
+    increaseViews();
   }, [id]);
-
-    const hasTrackedView = useRef(false);
-
-    useEffect(() => {
-      async function increaseViews() {
-        if (!id || hasTrackedView.current) return;
-
-        hasTrackedView.current = true;
-
-        try {
-          await updateDoc(doc(db, "notes", id), {
-            views: increment(1),
-          });
-        } catch (err) {
-          console.error("VIEW UPDATE ERROR:", err);
-        }
-      }
-
-      increaseViews();
-    }, [id]);
-
-        useEffect(() => {
-      async function fetchUserData() {
-        if (!user) return;
-
-        try {
-          const userSnap = await getDoc(doc(db, "users", user.uid));
-
-          if (userSnap.exists()) {
-            setUserData(userSnap.data());
-          }
-        } catch (err) {
-          console.error("USER DATA ERROR:", err);
-        }
-      }
-
-      fetchUserData();
-    }, [user]);
 
   useEffect(() => {
     async function fetchUserActions() {
-      if (!user || !id) return;
+      if (!user || !id) {
+        setLikeId(null);
+        setBookmarkId(null);
+        return;
+      }
 
       try {
         const likesQuery = query(
@@ -188,11 +186,12 @@ export default function NoteDetailsPage() {
           where("noteId", "==", id)
         );
 
-        const [likesSnap, bookmarksSnap, allLikesSnap] = await Promise.all([
-          getDocs(likesQuery),
-          getDocs(bookmarksQuery),
-          getDocs(allLikesQuery),
-        ]);
+        const [likesSnap, bookmarksSnap, allLikesSnap] =
+          await Promise.all([
+            getDocs(likesQuery),
+            getDocs(bookmarksQuery),
+            getDocs(allLikesQuery),
+          ]);
 
         setLikeId(likesSnap.docs[0]?.id || null);
         setBookmarkId(bookmarksSnap.docs[0]?.id || null);
@@ -242,7 +241,7 @@ export default function NoteDetailsPage() {
 
       setCommentText("");
       toast.success("Comment added.");
-      fetchComments();
+      await fetchComments();
     } catch (err) {
       console.error("COMMENT ERROR:", err);
       toast.error("Failed to add comment.");
@@ -252,13 +251,15 @@ export default function NoteDetailsPage() {
   }
 
   async function deleteComment(commentId: string) {
+    if (!user) return;
+
     const ok = confirm("Delete this comment?");
     if (!ok) return;
 
     try {
       await deleteDoc(doc(db, "comments", commentId));
       toast.success("Comment deleted.");
-      fetchComments();
+      await fetchComments();
     } catch (err) {
       console.error("DELETE COMMENT ERROR:", err);
       toast.error("Failed to delete comment.");
@@ -356,7 +357,7 @@ export default function NoteDetailsPage() {
         toast.success("Saved note.");
       }
     } catch (err) {
-      console.error(err);
+      console.error("BOOKMARK ERROR:", err);
       toast.error("Bookmark failed.");
     }
   }
@@ -374,9 +375,9 @@ export default function NoteDetailsPage() {
         downloadsCount: increment(1),
       });
 
-      window.open(note.pdfURL, "_blank");
+      window.open(note.pdfURL, "_blank", "noopener,noreferrer");
     } catch (err) {
-      console.error(err);
+      console.error("DOWNLOAD ERROR:", err);
       toast.error("Download failed.");
     }
   }
@@ -423,19 +424,15 @@ export default function NoteDetailsPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[70vh] items-center justify-center text-white">
-        <div className="mx-auto flex min-h-[70vh] max-w-6xl items-center justify-center">
-          <div className="text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-white/10 bg-white/5">
-              <RefreshCw className="animate-spin text-red-500" size={30} />
-            </div>
-
-            <h1 className="mt-4 text-xl font-black">Loading note</h1>
-
-            <p className="mt-2 text-sm text-white/50">
-              Opening PDF and note details...
-            </p>
+      <div className="flex min-h-[70vh] items-center justify-center text-[var(--foreground)]">
+        <div className="text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-[var(--border)] bg-[var(--card)]">
+            <RefreshCw className="animate-spin text-red-500" size={28} />
           </div>
+          <h1 className="mt-5 text-xl font-black">Loading note</h1>
+          <p className={`mt-2 text-sm ${mutedText}`}>
+            Opening PDF and note details...
+          </p>
         </div>
       </div>
     );
@@ -443,14 +440,20 @@ export default function NoteDetailsPage() {
 
   if (!note) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#050505] px-4 text-white">
-        <div className="rounded-3xl border border-white/10  p-8 text-center">
-          <FileText size={42} className="mx-auto text-red-400" />
-          <h1 className="mt-4 text-3xl font-black">Note Not Found</h1>
+      <main className="flex min-h-[70vh] items-center justify-center px-4 text-[var(--foreground)]">
+        <div className={`${cardClass} w-full max-w-md p-8 text-center`}>
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+            <FileText size={32} />
+          </div>
+
+          <h1 className="mt-5 text-2xl font-black">Note not found</h1>
+          <p className={`mt-2 text-sm ${mutedText}`}>
+            This note may have been removed or the link may be incorrect.
+          </p>
 
           <button
             onClick={() => router.push("/browse")}
-            className="mt-8 rounded-2xl bg-red-600 px-6 py-3 font-black text-white transition hover:bg-red-500"
+            className="mt-6 rounded-2xl bg-red-600 px-6 py-3 text-sm font-bold text-white transition hover:bg-red-500"
           >
             Back to Browse
           </button>
@@ -460,82 +463,82 @@ export default function NoteDetailsPage() {
   }
 
   return (
-    <div className="pb-28 text-white md:pb-10">
-      <div className="mx-auto max-w-7xl7xl pb-32 lg:pb-10">
+    <div className="min-w-0 pb-32 text-[var(--foreground)] lg:pb-10">
+      <div className="mx-auto w-full max-w-[1600px]">
         <button
           onClick={() => router.push("/browse")}
-          className="group inline-flex items-center gap-2 rounded-2xl border border-white/10  px-4 py-2.5 text-sm font-bold text-white/60 transition hover:text-white"
+          className="group inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2.5 text-sm font-semibold text-[var(--muted)] transition hover:text-[var(--foreground)]"
         >
           <ArrowLeft
             size={16}
             className="transition group-hover:-translate-x-1"
           />
-          Back
+          Back to Browse
         </button>
 
-        <div className="mt-4 grid gap-5 lg:grid-cols-[1.5fr_0.75fr] lg:gap-8">
-          <div className="space-y-5 lg:space-y-6">
-            <div className="overflow-hidden rounded-3xl border border-white/10   shadow-black/30">
-              <div className="flex items-center justify-between gap-3 border-b border-white/10 bg-black/30 px-4 py-3">
+        <div className="mt-5 grid min-w-0 grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.8fr)_minmax(340px,0.8fr)] xl:gap-6">
+          {/* MAIN CONTENT */}
+          <div className="min-w-0 space-y-5">
+            {/* PDF VIEWER */}
+            <section className={`${cardClass} min-w-0 overflow-hidden`}>
+              <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-4 sm:px-5">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="rounded-2xl bg-red-500/10 p-2 text-red-300">
-                    <FileText size={18} />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+                    <FileText size={19} />
                   </div>
 
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-black">
+                    <h2 className="truncate text-sm font-bold">
                       PDF Preview
-                    </p>
-                    <p className="text-xs text-white/40">
-                      Open original if preview does not load.
+                    </h2>
+                    <p className={`mt-0.5 text-xs ${mutedText}`}>
+                      Preview the uploaded study material
                     </p>
                   </div>
                 </div>
+
+                <a
+                  href={note.pdfURL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card-soft)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition hover:border-red-500/40"
+                >
+                  <FileText size={15} />
+                  <span className="hidden sm:inline">Open PDF</span>
+                </a>
               </div>
 
-          <PDFViewer file={note.pdfURL} />
+              <PDFViewer file={note.pdfURL} />
+            </section>
 
-            </div>
-            <section className="rounded-3xl border border-yellow-500/20 bg-yellow-500/5 p-4 md:p-5">
-              {/* MOBILE DISCLAIMER */}
-              <div className="flex items-center gap-2 md:hidden">
-                <div className="rounded-xl bg-yellow-500/10 p-2 text-yellow-400">
-                  <AlertTriangle size={16} />
-                  
-                </div>
-
-                <p className="text-xs leading-relaxed text-white/70">
-                  Educational disclaimer: NotesWallah does not claim ownership of
-                  third-party content uploaded by users.
-                </p>
-              </div>
-
-              {/* DESKTOP DISCLAIMER */}
-              <div className="hidden md:flex items-start gap-3">
-                <div className="rounded-2xl bg-yellow-500/10 p-2 text-yellow-400">
-                  <AlertTriangle size={20} />
+            {/* DISCLAIMER */}
+            <section className="rounded-3xl border border-yellow-500/20 bg-yellow-500/5 p-4 sm:p-5">
+              <div className="flex items-start gap-3">
+                <div className="shrink-0 rounded-xl bg-yellow-500/10 p-2 text-yellow-500">
+                  <AlertTriangle size={19} />
                 </div>
 
                 <div>
-                  <h2 className="font-black text-yellow-300">
+                  <h2 className="text-sm font-bold text-yellow-600 dark:text-yellow-300">
                     Educational Content Disclaimer
                   </h2>
 
-                  <p className="mt-2 text-sm leading-relaxed text-white/60">
-                    NotesWallah is a student-driven platform where students
-                    share notes to help each other learn. Some uploaded files may
-                    contain watermarks, logos, or references to schools,
-                    coaching institutes, websites, or educational organizations.
-                    Such materials are shared by users for educational and
-                    non-commercial purposes only. NotesWallah does not claim
-                    ownership of third-party content, trademarks, or branding. If
-                    you are the rightful owner of any material and want it
-                    reviewed or removed, contact us at{" "}
+                  <p className="mt-2 text-xs leading-relaxed text-[var(--muted)] sm:text-sm">
+                    Edukrate is a student-driven platform where students
+                    share notes to help each other learn. Some uploaded files
+                    may contain watermarks, logos, or references to schools,
+                    coaching institutes, websites, or educational
+                    organizations. Such materials are shared by users for
+                    educational and non-commercial purposes only. Edukrate
+                    does not claim ownership of third-party content,
+                    trademarks, or branding. If you are the rightful owner of
+                    any material and want it reviewed or removed, contact us
+                    at{" "}
                     <a
-                      href="mailto:legal@noteswallah.co.in"
-                      className="font-semibold text-yellow-300 underline-offset-4 hover:underline"
+                      href="mailto:legal@edukrate.co.in"
+                      className="font-semibold text-yellow-600 underline-offset-4 hover:underline dark:text-yellow-300"
                     >
-                      legal@noteswallah.co.in
+                      legal@edukrate.co.in
                     </a>
                     .
                   </p>
@@ -543,50 +546,75 @@ export default function NoteDetailsPage() {
               </div>
             </section>
 
-            <section className="rounded-3xl border border-white/10  p-5  sm:p-6">
-              <div className="flex items-center gap-3">
-                <MessageCircle className="text-red-500" size={22} />
-                <h2 className="text-2xl font-black">
-                  Comments ({comments.length})
-                </h2>
+            {/* COMMENTS */}
+            <section className={`${cardClass} p-4 sm:p-6`}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+                    <MessageCircle size={20} />
+                  </div>
+
+                  <div>
+                    <h2 className="text-lg font-black sm:text-xl">
+                      Discussion
+                    </h2>
+                    <p className={`text-xs ${mutedText}`}>
+                      {comments.length}{" "}
+                      {comments.length === 1 ? "comment" : "comments"}
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div className="mt-6">
+              <div className="mt-5">
                 <textarea
                   value={commentText}
                   onChange={(e) => setCommentText(e.target.value)}
                   placeholder={
                     user
                       ? "Ask a question or share feedback..."
-                      : "Login to comment..."
+                      : "Sign in to join the discussion..."
                   }
                   rows={3}
                   disabled={!user}
-                  className="w-full rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm text-white outline-none focus:border-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={inputClass}
                 />
 
-                <button
-                  onClick={handleCommentSubmit}
-                  disabled={commenting || !user}
-                  className="mt-3 inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 px-6 py-3 text-sm font-black text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {commenting && <Loader2 size={16} className="animate-spin" />}
-                  {commenting ? "Posting..." : "Post Comment"}
-                </button>
+                <div className="mt-3 flex justify-end">
+                  <button
+                    onClick={handleCommentSubmit}
+                    disabled={commenting || !user}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {commenting && (
+                      <Loader2 size={16} className="animate-spin" />
+                    )}
+                    {commenting ? "Posting..." : "Post Comment"}
+                  </button>
+                </div>
               </div>
 
-              <div className="mt-8 space-y-4">
+              <div className="mt-6 space-y-3">
                 {comments.length === 0 ? (
-                  <p className="rounded-2xl border border-white/10 bg-black/25 p-4 text-sm text-white/50">
-                    No comments yet. Be the first to comment.
-                  </p>
+                  <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card-soft)] px-4 py-8 text-center">
+                    <MessageCircle
+                      size={25}
+                      className="mx-auto text-[var(--muted)]"
+                    />
+                    <p className="mt-3 text-sm font-semibold">
+                      No comments yet
+                    </p>
+                    <p className={`mt-1 text-xs ${mutedText}`}>
+                      Start the discussion by posting the first comment.
+                    </p>
+                  </div>
                 ) : (
                   comments.map((comment) => (
-                    <div
+                    <article
                       key={comment.id}
-                      className="rounded-2xl border border-white/10 bg-black/30 p-4"
+                      className="rounded-2xl border border-[var(--border)] bg-[var(--card-soft)] p-4"
                     >
-                      <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start justify-between gap-3">
                         <Link
                           href={`/profile/${comment.userId}`}
                           className="flex min-w-0 items-center gap-3"
@@ -598,10 +626,10 @@ export default function NoteDetailsPage() {
                           />
 
                           <div className="min-w-0">
-                            <p className="truncate font-semibold">
+                            <p className="truncate text-sm font-bold">
                               {comment.userName}
                             </p>
-                            <p className="text-xs text-white/40">
+                            <p className={`mt-0.5 text-xs ${mutedText}`}>
                               {formatDate(comment.createdAt)}
                             </p>
                           </div>
@@ -610,7 +638,7 @@ export default function NoteDetailsPage() {
                         {user?.uid === comment.userId && (
                           <button
                             onClick={() => deleteComment(comment.id)}
-                            className="shrink-0 rounded-xl border border-red-500/20 bg-red-500/10 p-2 text-red-400 transition hover:bg-red-500/20"
+                            className="shrink-0 rounded-xl border border-red-500/20 bg-red-500/10 p-2 text-red-500 transition hover:bg-red-500/20"
                             aria-label="Delete comment"
                           >
                             <Trash2 size={16} />
@@ -618,93 +646,131 @@ export default function NoteDetailsPage() {
                         )}
                       </div>
 
-                      <p className="mt-4 whitespace-pre-wrap break-words text-sm leading-relaxed text-white/70">
+                      <p className="mt-4 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--muted-strong)]">
                         {comment.text}
                       </p>
-                    </div>
+                    </article>
                   ))
                 )}
               </div>
             </section>
           </div>
 
-          <div className="space-y-5 lg:order-last lg:space-y-6">
-            <div className="rounded-3xl border border-white/10  p-5  backdrop-blur-xl sm:p-6">
-              <div className="mb-4 inline-flex rounded-full border border-red-500/20 bg-red-500/10 px-4 py-2 text-xs font-black text-red-400">
-                Verified Study Material
+          {/* DETAILS SIDEBAR */}
+          <aside className="min-w-0 space-y-5 xl:sticky xl:top-6">
+            {/* NOTE INFORMATION */}
+            <section className={`${cardClass} p-5 sm:p-6`}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-green-500/20 bg-green-500/10 px-3 py-1.5 text-xs font-bold text-green-600 dark:text-green-400">
+                  <CheckCircle2 size={13} />
+                  Approved Material
+                </span>
               </div>
 
-              <h1 className="break-words text-2xl font-black leading-tight sm:text-3xl">
+              <h1 className="mt-4 break-words text-2xl font-black leading-tight sm:text-3xl">
                 {note.title}
               </h1>
 
-              <p className="mt-4 text-sm leading-relaxed text-white/60">
+              <p className={`mt-3 text-sm leading-relaxed ${mutedText}`}>
                 {note.description || "No description provided."}
               </p>
 
-              <AISummaryCard
-                text={`${note.title || ""}\n\n${note.description || ""}`}
-              />
+              <div className="mt-5">
+                <AISummaryCard
+                  text={`${note.title || ""}\n\n${note.description || ""}`}
+                />
+              </div>
 
-              <div className="mt-6 grid grid-cols-2 gap-3">
-                <InfoBox label="Subject" value={note.subject || "N/A"} />
-                <InfoBox label="Class" value={note.class || "N/A"} />
-                <InfoBox label="Topic" value={note.topic || "N/A"} />
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <InfoBox
+                  label="Subject"
+                  value={note.subject || "N/A"}
+                />
+                <InfoBox
+                  label="Class"
+                  value={note.class || "N/A"}
+                />
+                <InfoBox
+                  label="Topic"
+                  value={note.topic || "N/A"}
+                />
                 <InfoBox
                   label="Downloads"
                   value={String(note.downloadsCount ?? 0)}
                 />
               </div>
 
-              <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4">
-                <p className="text-xs text-white/40">Likes</p>
-                <p className="mt-1 font-medium">{likesCount}</p>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <InfoBox
+                  label="Likes"
+                  value={String(likesCount)}
+                />
+                <InfoBox
+                  label="Views"
+                  value={String(note.views ?? 0)}
+                />
               </div>
 
               {note.tags?.length > 0 && (
-                <div className="mt-6 flex flex-wrap gap-2">
-                  {note.tags.map((tag, index) => (
-                    <span
-                      key={index}
-                      className="max-w-full truncate rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70"
-                    >
-                      #{tag}
-                    </span>
-                  ))}
+                <div className="mt-5">
+                  <p className={`mb-3 text-xs font-bold uppercase tracking-wider ${mutedText}`}>
+                    Topics and Tags
+                  </p>
+
+                  <div className="flex flex-wrap gap-2">
+                    {note.tags.map((tag, index) => (
+                      <span
+                        key={`${tag}-${index}`}
+                        className="max-w-full truncate rounded-full border border-[var(--border)] bg-[var(--card-soft)] px-3 py-1.5 text-xs font-medium text-[var(--muted-strong)]"
+                      >
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
 
+              {/* DESKTOP ACTIONS */}
               <div className="mt-6 hidden flex-col gap-3 lg:flex">
                 <button
                   onClick={handleDownload}
-                  className="flex items-center justify-center gap-2 rounded-2xl bg-red-600 px-6 py-4 font-black text-white transition hover:bg-red-500"
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-red-600 px-5 py-4 text-sm font-black text-white transition hover:bg-red-500"
                 >
                   <Download size={18} />
                   {user ? "Download PDF" : "Login to Download"}
                 </button>
 
-                <button
-                  onClick={handleLike}
-                  className={`flex items-center justify-center gap-2 rounded-2xl px-6 py-4 font-black transition ${
-                    isLiked
-                      ? "border border-red-500/30 bg-red-500/10 text-red-400"
-                      : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
-                  }`}
-                >
-                  <Heart
-                    size={18}
-                    className={isLiked ? "fill-red-500 text-red-500" : ""}
-                  />
-                  {isLiked ? `Liked (${likesCount})` : `Like (${likesCount})`}
-                </button>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={handleLike}
+                    className={`flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold transition ${
+                      isLiked
+                        ? "border-red-500/30 bg-red-500/10 text-red-500"
+                        : "border-[var(--border)] bg-[var(--card-soft)] text-[var(--foreground)] hover:border-red-500/30"
+                    }`}
+                  >
+                    <Heart
+                      size={17}
+                      className={isLiked ? "fill-red-500" : ""}
+                    />
+                    {isLiked ? "Liked" : "Like"}
+                  </button>
 
-                <button
-                  onClick={handleBookmark}
-                  className="flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-6 py-4 font-black text-white transition hover:bg-white/10"
-                >
-                  <Bookmark size={18} />
-                  {isBookmarked ? "Saved ✓" : "Save Note"}
-                </button>
+                  <button
+                    onClick={handleBookmark}
+                    className={`flex items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold transition ${
+                      isBookmarked
+                        ? "border-red-500/30 bg-red-500/10 text-red-500"
+                        : "border-[var(--border)] bg-[var(--card-soft)] text-[var(--foreground)] hover:border-red-500/30"
+                    }`}
+                  >
+                    <Bookmark
+                      size={17}
+                      className={isBookmarked ? "fill-current" : ""}
+                    />
+                    {isBookmarked ? "Saved" : "Save"}
+                  </button>
+                </div>
 
                 <button
                   onClick={() => {
@@ -715,84 +781,105 @@ export default function NoteDetailsPage() {
 
                     setReportOpen(true);
                   }}
-                  className="flex items-center justify-center gap-2 rounded-2xl border border-yellow-500/20 bg-yellow-500/10 px-6 py-4 font-black text-yellow-400 transition hover:bg-yellow-500/20"
+                  className="flex items-center justify-center gap-2 rounded-2xl border border-yellow-500/20 bg-yellow-500/5 px-5 py-3 text-sm font-bold text-yellow-600 transition hover:bg-yellow-500/10 dark:text-yellow-400"
                 >
-                  <AlertTriangle size={18} />
+                  <AlertTriangle size={17} />
                   Report Note
                 </button>
               </div>
-            </div>
+            </section>
 
-            <div className="rounded-3xl border border-white/10  p-5  backdrop-blur-xl sm:p-6">
-              <p className="text-xs font-bold uppercase tracking-widest text-white/40">
+            {/* UPLOADER */}
+            <section className={`${cardClass} p-5 sm:p-6`}>
+              <p className={`text-xs font-bold uppercase tracking-wider ${mutedText}`}>
                 Uploaded By
               </p>
 
-              <div className="mt-4 flex items-center gap-4">
-                <UserAvatar name={note.uploaderName || "User"} size="md" />
+              <div className="mt-4 flex items-center gap-3">
+                <UserAvatar
+                  name={note.uploaderName || "User"}
+                  size="md"
+                />
 
                 <div className="min-w-0">
-                  <h3 className="truncate font-semibold">
-                    {note.uploaderName || "NotesWallah User"}
+                  <h3 className="truncate text-sm font-bold">
+                    {note.uploaderName || "Edukrate User"}
                   </h3>
-                  <p className="text-sm text-white/50">
-                    NotesWallah Contributor
+                  <p className={`mt-1 text-xs ${mutedText}`}>
+                    Edukrate Contributor
                   </p>
                 </div>
               </div>
 
               <button
-                onClick={() => router.push(`/profile/${note.uploaderId}`)}
-                className="mt-4 w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white/70 transition hover:bg-white/10 hover:text-white"
+                onClick={() => {
+                  if (note.uploaderId) {
+                    router.push(`/profile/${note.uploaderId}`);
+                  }
+                }}
+                disabled={!note.uploaderId}
+                className="mt-5 w-full rounded-xl border border-[var(--border)] bg-[var(--card-soft)] px-5 py-3 text-sm font-bold text-[var(--foreground)] transition hover:border-red-500/40 disabled:opacity-50"
               >
                 View Profile
               </button>
-            </div>
+            </section>
 
-            <div className="rounded-3xl border border-green-500/20 bg-green-500/5 p-5">
-              <p className="text-sm font-black text-green-400">
-                Safe Download
-              </p>
+            {/* SAFETY INFO */}
+            <section className="rounded-3xl border border-green-500/20 bg-green-500/5 p-5">
+              <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                <CheckCircle2 size={18} />
+                <p className="text-sm font-bold">Moderation Approved</p>
+              </div>
 
-              <p className="mt-2 text-xs leading-relaxed text-white/50">
+              <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">
                 This note was reviewed and approved before appearing on
-                NotesWallah.
+                Edukrate.
               </p>
-            </div>
-          </div>
+            </section>
+          </aside>
         </div>
       </div>
 
-      <div className="fixed inset-x-0 bottom-[76px] z-40 border-t border-white/10 bg-[#050505]/95 px-3 pb-4 pt-3 backdrop-blur-xl lg:hidden">
-        <div className="flex gap-2">
+      {/* MOBILE ACTION BAR */}
+      <div className="fixed inset-x-0 bottom-[76px] z-40 border-t border-[var(--border)] bg-[var(--card)]/95 px-3 pb-3 pt-3 backdrop-blur-xl lg:hidden">
+        <div className="mx-auto flex max-w-3xl gap-2">
           <button
             onClick={handleLike}
-            className={`flex h-14 flex-1 items-center justify-center rounded-2xl transition ${
+            className={`flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border text-sm font-bold transition ${
               isLiked
-                ? "bg-red-600 text-white"
-                : "border border-white/10 bg-white/5 text-white"
+                ? "border-red-500/30 bg-red-500/10 text-red-500"
+                : "border-[var(--border)] bg-[var(--card-soft)] text-[var(--foreground)]"
             }`}
             aria-label="Like note"
           >
             <Heart
-              size={19}
-              className={isLiked ? "fill-white text-white" : ""}
+              size={18}
+              className={isLiked ? "fill-red-500" : ""}
             />
+            <span>{likesCount}</span>
           </button>
 
           <button
             onClick={handleBookmark}
-            className={`flex h-14 flex-1 items-center justify-center rounded-2xl border border-white/10 ${
-              isBookmarked ? "bg-white text-black" : "bg-white/5 text-white"
+            className={`flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border text-sm font-bold transition ${
+              isBookmarked
+                ? "border-red-500/30 bg-red-500/10 text-red-500"
+                : "border-[var(--border)] bg-[var(--card-soft)] text-[var(--foreground)]"
             }`}
             aria-label="Save note"
           >
-            <Bookmark size={19} />
+            <Bookmark
+              size={18}
+              className={isBookmarked ? "fill-current" : ""}
+            />
+            <span className="hidden min-[380px]:inline">
+              {isBookmarked ? "Saved" : "Save"}
+            </span>
           </button>
 
           <button
             onClick={handleDownload}
-            className="flex h-14 flex-[2] items-center justify-center gap-2 rounded-2xl bg-red-600 px-5 font-black text-white"
+            className="flex h-12 flex-[1.5] items-center justify-center gap-2 rounded-xl bg-red-600 px-3 text-sm font-bold text-white transition hover:bg-red-500"
           >
             <Download size={18} />
             Download
@@ -800,30 +887,39 @@ export default function NoteDetailsPage() {
         </div>
       </div>
 
+      {/* REPORT MODAL */}
       {reportOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-3xl border border-white/10 bg-zinc-950 p-5 text-white  sm:p-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-black">Report Note</h2>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setReportOpen(false);
+          }}
+        >
+          <div className="w-full max-w-lg rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 text-[var(--foreground)] shadow-2xl sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-black sm:text-2xl">
+                  Report Note
+                </h2>
+                <p className={`mt-1 text-xs ${mutedText}`}>
+                  Help us keep Edukrate useful and safe.
+                </p>
+              </div>
 
               <button
                 onClick={() => setReportOpen(false)}
-                className="rounded-xl border border-white/10 bg-white/5 p-2 text-white/70 hover:bg-white/10"
+                className="rounded-xl border border-[var(--border)] bg-[var(--card-soft)] p-2 text-[var(--muted)] transition hover:text-[var(--foreground)]"
                 aria-label="Close report modal"
               >
                 <X size={18} />
               </button>
             </div>
 
-            <p className="mt-3 text-sm text-white/60">
-              Help us keep NotesWallah safe and useful for students.
-            </p>
-
             <div className="mt-6 space-y-4">
               <div>
                 <label
                   htmlFor="reportReason"
-                  className="mb-2 block text-sm text-white/70"
+                  className="mb-2 block text-sm font-semibold"
                 >
                   Reason
                 </label>
@@ -832,7 +928,7 @@ export default function NoteDetailsPage() {
                   id="reportReason"
                   value={reportReason}
                   onChange={(e) => setReportReason(e.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-white outline-none focus:border-red-500"
+                  className={inputClass}
                 >
                   <option value="">Select a reason</option>
                   <option value="Wrong or misleading content">
@@ -844,7 +940,9 @@ export default function NoteDetailsPage() {
                   <option value="Inappropriate content">
                     Inappropriate content
                   </option>
-                  <option value="Copyright issue">Copyright issue</option>
+                  <option value="Copyright issue">
+                    Copyright issue
+                  </option>
                   <option value="Other">Other</option>
                 </select>
               </div>
@@ -852,9 +950,9 @@ export default function NoteDetailsPage() {
               <div>
                 <label
                   htmlFor="reportDetails"
-                  className="mb-2 block text-sm text-white/70"
+                  className="mb-2 block text-sm font-semibold"
                 >
-                  Details optional
+                  Additional details (optional)
                 </label>
 
                 <textarea
@@ -863,16 +961,18 @@ export default function NoteDetailsPage() {
                   onChange={(e) => setReportDetails(e.target.value)}
                   rows={4}
                   placeholder="Explain the issue briefly..."
-                  className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-white outline-none focus:border-red-500"
+                  className={inputClass}
                 />
               </div>
 
               <button
                 onClick={handleReportSubmit}
                 disabled={reporting}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-red-600 px-6 py-4 font-black text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-6 py-3.5 text-sm font-bold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {reporting && <Loader2 size={18} className="animate-spin" />}
+                {reporting && (
+                  <Loader2 size={17} className="animate-spin" />
+                )}
                 {reporting ? "Submitting..." : "Submit Report"}
               </button>
             </div>
@@ -883,11 +983,19 @@ export default function NoteDetailsPage() {
   );
 }
 
-function InfoBox({ label, value }: { label: string; value: string }) {
+function InfoBox({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
-    <div className="min-w-0 rounded-2xl border border-white/10 bg-black/30 p-4">
-      <p className="text-xs text-white/40">{label}</p>
-      <p className="mt-1 truncate font-medium">{value}</p>
+    <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--card-soft)] p-3.5">
+      <p className="text-xs text-[var(--muted)]">{label}</p>
+      <p className="mt-1 break-words text-sm font-bold text-[var(--foreground)]">
+        {value}
+      </p>
     </div>
   );
 }

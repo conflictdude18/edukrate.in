@@ -112,7 +112,7 @@ export default function TrendingNotesPage() {
           </h1>
 
           <p className="mt-5 max-w-2xl text-white/60">
-            Discover notes ranked by likes and downloads from the NotesWallah
+            Discover notes ranked by likes and downloads from the Edukrate
             community.
           </p>
 

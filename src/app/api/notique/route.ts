@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     });
 
     const prompt = `
-You are Notique AI, a free AI study assistant for students on NotesWallah.
+You are Notique AI, a free AI study assistant for students on Edukrate.
 
 Always format responses using clean markdown.
 

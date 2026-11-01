@@ -1,16 +1,14 @@
+
 "use client";
 
+import type React from "react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   collection,
-  doc,
   getDocs,
   orderBy,
   query,
-  serverTimestamp,
-  setDoc,
-  where,
 } from "firebase/firestore";
 import {
   BadgeCheck,
@@ -25,6 +23,11 @@ import {
   Users,
   X,
   Crown,
+  Eye,
+  ArrowUpRight,
+  TrendingUp,
+  SlidersHorizontal,
+  Award,
 } from "lucide-react";
 
 import { db } from "@/firebase/firebase";
@@ -56,69 +59,26 @@ type Creator = {
 
 type SortMode = "overall" | "uploads" | "downloads" | "streak";
 
+const numberFormat = (value: number) =>
+  new Intl.NumberFormat("en-IN").format(value);
+
 function getScore(creator: Creator) {
   return creator.reputation || 0;
 }
 
-async function rebuildCreatorStatsFromNotes() {
-  const approvedNotesQuery = query(
-    collection(db, "notes"),
-    where("status", "==", "approved")
-  );
+function getLevel(creator: Creator) {
+  return creator.creatorLevel?.level || 1;
+}
 
-  const notesSnap = await getDocs(approvedNotesQuery);
+function getLevelTitle(creator: Creator) {
+  return creator.creatorLevel?.title || "Starter";
+}
 
-  const creatorsMap = new Map<string, Creator>();
-
-  notesSnap.docs.forEach((noteSnap) => {
-    const note = noteSnap.data();
-    const uploaderId = note.uploaderId;
-
-    if (!uploaderId) return;
-
-    const old = creatorsMap.get(uploaderId);
-
-    creatorsMap.set(uploaderId, {
-      userId: uploaderId,
-      displayName:
-        note.uploaderName ||
-        note.authorName ||
-        old?.displayName ||
-        "NotesWallah Creator",
-      photoURL: old?.photoURL || "",
-      uploads: (old?.uploads || 0) + 1,
-      approvedUploads: (old?.approvedUploads || 0) + 1,
-      totalDownloads:
-        (old?.totalDownloads || 0) + Number(note.downloadsCount || 0),
-      totalLikes: (old?.totalLikes || 0) + Number(note.likesCount || 0),
-      totalViews: (old?.totalViews || 0) + Number(note.viewsCount || 0),
-      uploadStreak: old?.uploadStreak || 0,
-      bestUploadStreak: old?.bestUploadStreak || 0,
-      profileCompletion: old?.profileCompletion || 0,
-      reputation: old?.reputation || 0,
-      monthlyReputation: old?.monthlyReputation || 0,
-      weeklyReputation: old?.weeklyReputation || 0,
-      verifiedCreator: old?.verifiedCreator || false,
-      badges: old?.badges || [],
-      creatorLevel: old?.creatorLevel || undefined,
-    });
-  });
-
-  await Promise.all(
-    Array.from(creatorsMap.values()).map((creator) =>
-      setDoc(
-        doc(db, "creatorStats", creator.userId),
-        {
-          ...creator,
-          reputation:
-            creator.reputation ||
-            creator.approvedUploads * 25 + creator.uploads * 10,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      )
-    )
-  );
+function getRankLabel(index: number) {
+  if (index === 0) return "🥇";
+  if (index === 1) return "🥈";
+  if (index === 2) return "🥉";
+  return `#${index + 1}`;
 }
 
 export default function CreatorsPage() {
@@ -126,63 +86,68 @@ export default function CreatorsPage() {
   const [search, setSearch] = useState("");
   const [sortMode, setSortMode] = useState<SortMode>("overall");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
+    let active = true;
+
     async function fetchCreators() {
       try {
+        setError(false);
+
         const creatorStatsQuery = query(
           collection(db, "creatorStats"),
           orderBy("reputation", "desc")
         );
 
-        let snap = await getDocs(creatorStatsQuery);
-        console.log("CREATOR DOCS:", snap.size);
+        const snap = await getDocs(creatorStatsQuery);
 
         const data: Creator[] = snap.docs.map((docSnap) => {
-          const data = docSnap.data();
+          const raw = docSnap.data();
 
           return {
-            userId: data.userId || docSnap.id,
-            displayName: data.displayName || "NotesWallah Creator",
-            photoURL: data.photoURL || "",
-            uploads: Number(data.uploads || 0),
-            approvedUploads: Number(data.approvedUploads || 0),
-            totalDownloads: Number(data.totalDownloads || 0),
-            totalLikes: Number(data.totalLikes || 0),
-            totalViews: Number(data.totalViews || 0),
-            uploadStreak: Number(data.uploadStreak || 0),
-            bestUploadStreak: Number(data.bestUploadStreak || 0),
-            profileCompletion: Number(data.profileCompletion || 0),
-
-            reputation: Number(data.reputation || 0),
-            monthlyReputation: Number(data.monthlyReputation || 0),
-            weeklyReputation: Number(data.weeklyReputation || 0),
-            verifiedCreator: Boolean(data.verifiedCreator),
-
-            badges: Array.isArray(data.badges) ? data.badges : [],
-            creatorLevel: data.creatorLevel || undefined,
+            userId: raw.userId || docSnap.id,
+            displayName: raw.displayName || "NotesWallah Creator",
+            photoURL: raw.photoURL || "",
+            uploads: Number(raw.uploads || 0),
+            approvedUploads: Number(raw.approvedUploads || 0),
+            totalDownloads: Number(raw.totalDownloads || 0),
+            totalLikes: Number(raw.totalLikes || 0),
+            totalViews: Number(raw.totalViews || 0),
+            uploadStreak: Number(raw.uploadStreak || 0),
+            bestUploadStreak: Number(raw.bestUploadStreak || 0),
+            profileCompletion: Number(raw.profileCompletion || 0),
+            reputation: Number(raw.reputation || 0),
+            monthlyReputation: Number(raw.monthlyReputation || 0),
+            weeklyReputation: Number(raw.weeklyReputation || 0),
+            verifiedCreator: Boolean(raw.verifiedCreator),
+            badges: Array.isArray(raw.badges) ? raw.badges : [],
+            creatorLevel: raw.creatorLevel || undefined,
           };
         });
 
-        setCreators(data);
-      } catch (error) {
-        console.error("CREATORS ERROR:", error);
+        if (active) setCreators(data);
+      } catch (err) {
+        console.error("CREATORS ERROR:", err);
+        if (active) setError(true);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     }
 
     fetchCreators();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const filteredCreators = useMemo(() => {
     const term = search.toLowerCase().trim();
 
-    const filtered = creators.filter((creator) => {
-      if (!term) return true;
-
-      return creator.displayName.toLowerCase().includes(term);
-    });
+    const filtered = creators.filter((creator) =>
+      creator.displayName.toLowerCase().includes(term)
+    );
 
     return [...filtered].sort((a, b) => {
       if (sortMode === "uploads") {
@@ -201,272 +166,496 @@ export default function CreatorsPage() {
     });
   }, [creators, search, sortMode]);
 
-  const topCreator = filteredCreators[0];
   const totalCreators = creators.length;
+
   const totalApprovedUploads = creators.reduce(
     (sum, creator) => sum + creator.approvedUploads,
     0
   );
+
   const totalDownloads = creators.reduce(
     (sum, creator) => sum + creator.totalDownloads,
     0
   );
 
+  const totalViews = creators.reduce(
+    (sum, creator) => sum + creator.totalViews,
+    0
+  );
+
+  const topCreator = filteredCreators[0];
+
   if (loading) {
     return (
-      <div className="flex min-h-[70vh] items-center justify-center text-white">
-          <div className="text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-white/10 bg-white/5">
-              <RefreshCw className="animate-spin text-red-500" size={30} />
-            </div>
-            <h1 className="mt-5 text-xl font-black">Loading leaderboard</h1>
-            <p className="mt-2 text-sm text-white/50">
-              Ranking NotesWallah creators...
-            </p>
+      <main className="flex min-h-[65vh] w-full items-center justify-center px-4">
+        <div className="text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+            <RefreshCw className="animate-spin text-red-500" size={27} />
           </div>
+          <h1 className="mt-5 text-xl font-black text-[var(--foreground)]">
+            Loading leaderboard
+          </h1>
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            Fetching creator rankings...
+          </p>
         </div>
+      </main>
     );
   }
 
   return (
-    <div className="space-y-5 pb-28 text-white md:pb-10">
-        <section className="relative overflow-hidden">
+    <main className="w-full min-w-0 space-y-6 overflow-x-hidden px-1 py-5 pb-28 text-[var(--foreground)] sm:px-2 lg:px-3 md:space-y-7 md:pb-12">
 
-          <div className="relative grid gap-7 lg:grid-cols-[1fr_360px] lg:items-end">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-4 py-2 text-xs font-black text-red-300">
-                <Trophy size={15} />
-                Creator Leaderboard
-              </div>
+      {/* HERO */}
+      <section className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--panel)] p-5 shadow-sm sm:p-7 lg:p-9">
+        <div className="pointer-events-none absolute -right-20 -top-24 h-80 w-80 rounded-full bg-red-500/[0.09] blur-[90px]" />
+        <div className="pointer-events-none absolute -bottom-32 left-1/3 h-64 w-64 rounded-full bg-orange-500/[0.07] blur-[90px]" />
 
-              <h1 className="mt-5 text-3xl font-black sm:text-5xl">
-                Top Contributors
-              </h1>
-
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55 sm:text-base">
-                Discover creators ranked by approved notes, downloads, likes,
-                views, and upload streaks.
-              </p>
+        <div className="relative grid gap-8 lg:grid-cols-[1fr_420px] lg:items-end">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-4 py-2 text-xs font-black uppercase tracking-wider text-red-600 dark:text-red-300">
+              <Trophy size={15} />
+              Community leaderboard
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              <HeroStat label="Creators" value={totalCreators} />
-              <HeroStat label="Notes" value={totalApprovedUploads} />
-              <HeroStat label="Downloads" value={totalDownloads} />
+            <h1 className="mt-6 text-4xl font-black tracking-tight text-[var(--foreground)] sm:text-5xl lg:text-6xl">
+              Creator
+              <span className="block bg-gradient-to-r from-red-500 via-red-600 to-orange-500 bg-clip-text text-transparent">
+                Leaderboard.
+              </span>
+            </h1>
+
+            <p className="mt-5 max-w-2xl text-sm leading-7 text-[var(--muted)] sm:text-base">
+              Celebrating the students and contributors who make
+              learning better. Explore top creators, discover
+              achievements and get inspired.
+            </p>
+
+            <div className="mt-7 flex flex-wrap items-center gap-3 text-xs font-bold text-[var(--muted)]">
+              <span className="flex items-center gap-2">
+                <Sparkles size={15} className="text-yellow-500" />
+                Community driven
+              </span>
+              <span className="h-1 w-1 rounded-full bg-[var(--muted)]/40" />
+              <span className="flex items-center gap-2">
+                <TrendingUp size={15} className="text-green-500" />
+                Reputation rankings
+              </span>
             </div>
           </div>
-        </section>
 
-        <section className="grid gap-3 lg:grid-cols-[1fr_360px]">
-          <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-3">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center">
-              <div className="relative flex-1">
-                <Search
-                  size={18}
-                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/40"
-                />
+          <div className="grid grid-cols-2 gap-3">
+            <HeroStat
+              icon={<Users size={19} />}
+              label="Creators"
+              value={totalCreators}
+            />
+            <HeroStat
+              icon={<FileText size={19} />}
+              label="Approved Notes"
+              value={totalApprovedUploads}
+            />
+            <HeroStat
+              icon={<Download size={19} />}
+              label="Downloads"
+              value={totalDownloads}
+            />
+            <HeroStat
+              icon={<Eye size={19} />}
+              label="Total Views"
+              value={totalViews}
+            />
+          </div>
+        </div>
+      </section>
 
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search creators..."
-                  className="w-full rounded-2xl border border-white/10 bg-black/30 py-3.5 pl-11 pr-11 text-sm font-semibold text-white outline-none transition placeholder:text-white/35 focus:border-red-500/40"
-                />
+      {/* FEATURED CREATOR */}
+      {topCreator && (
+        <section className="relative overflow-hidden rounded-3xl border border-red-500/20 bg-gradient-to-br from-red-500/[0.09] via-[var(--panel)] to-orange-500/[0.06] p-5 shadow-sm sm:p-7 lg:p-8">
+          <div className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-red-500/[0.08] blur-[90px]" />
 
-                {search && (
-                  <button
-                    type="button"
-                    onClick={() => setSearch("")}
-                    className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-xl bg-white/10 text-white/60"
-                    aria-label="Clear search"
-                  >
-                    <X size={15} />
-                  </button>
-                )}
+          <div className="relative grid gap-7 lg:grid-cols-[1fr_auto] lg:items-center">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-red-600 dark:text-red-400">
+                <Crown size={17} className="text-yellow-500" />
+                Current top creator
               </div>
+
+              <div className="mt-6 flex flex-col gap-5 sm:flex-row sm:items-center">
+                <div className="relative shrink-0">
+                  <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-1">
+                    <UserAvatar
+                      name={topCreator.displayName}
+                      src={topCreator.photoURL || ""}
+                      size="lg"
+                    />
+                  </div>
+
+                  <div className="absolute -bottom-2 -right-2 flex h-9 w-9 items-center justify-center rounded-xl border-2 border-[var(--panel)] bg-yellow-500 text-black">
+                    <Medal size={20} />
+                  </div>
+                </div>
+
+                <div className="min-w-0">
+                  <h2 className="flex flex-wrap items-center gap-2 text-2xl font-black text-[var(--foreground)] sm:text-3xl">
+                    {topCreator.displayName}
+                    {topCreator.verifiedCreator && (
+                      <BadgeCheck size={23} className="shrink-0 text-blue-500" />
+                    )}
+                  </h2>
+
+                  <p className="mt-2 text-sm font-bold text-red-600 dark:text-red-300">
+                    Level {getLevel(topCreator)} · {getLevelTitle(topCreator)}
+                  </p>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <span className="rounded-full border border-yellow-500/25 bg-yellow-500/10 px-3 py-1.5 text-xs font-black text-yellow-700 dark:text-yellow-300">
+                      <Trophy size={12} className="mr-1 inline" />
+                      #1 Ranked Creator
+                    </span>
+
+                    <span className="rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-bold text-[var(--muted-strong)]">
+                      {numberFormat(topCreator.reputation)} Reputation
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <Link
+              href={`/profile/${topCreator.userId}`}
+              className="group inline-flex items-center justify-center gap-3 rounded-xl bg-red-600 px-7 py-4 text-sm font-black text-white shadow-lg shadow-red-950/10 transition hover:bg-red-500"
+            >
+              View Top Creator
+              <ArrowUpRight
+                size={18}
+                className="transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+              />
+            </Link>
+          </div>
+
+          <div className="relative mt-8 grid grid-cols-3 gap-3 border-t border-[var(--border)] pt-6">
+            <FeatureStat label="Approved Notes" value={topCreator.approvedUploads} />
+            <FeatureStat label="Downloads" value={topCreator.totalDownloads} />
+            <FeatureStat label="Reputation" value={topCreator.reputation} />
+          </div>
+        </section>
+      )}
+
+      {/* SEARCH AND FILTER */}
+      <section className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <Users size={20} className="text-red-500" />
+              <h2 className="text-xl font-black text-[var(--foreground)] sm:text-2xl">
+                Explore Creators
+              </h2>
+            </div>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              Find and discover talented contributors.
+            </p>
+          </div>
+
+          <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto">
+            <div className="relative flex-1 lg:w-[340px]">
+              <Search
+                size={18}
+                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+              />
+
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search creators by name..."
+                className="nw-input h-12 pl-11 pr-11 text-sm font-semibold"
+              />
+
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  aria-label="Clear search"
+                  className="absolute right-3 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[var(--muted)] transition hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+
+            <div className="relative sm:w-[210px]">
+              <SlidersHorizontal
+                size={16}
+                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+              />
 
               <select
                 value={sortMode}
                 onChange={(e) => setSortMode(e.target.value as SortMode)}
-                className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3.5 text-sm font-black text-white outline-none focus:border-red-500/40"
+                className="nw-input h-12 appearance-none pl-11 pr-4 text-sm font-bold"
               >
-                <option value="overall" className="bg-[#050505]">
-                  Overall Rank
-                </option>
-                <option value="uploads" className="bg-[#050505]">
-                  Most Uploads
-                </option>
-                <option value="downloads" className="bg-[#050505]">
-                  Most Downloads
-                </option>
-                <option value="streak" className="bg-[#050505]">
-                  Best Streak
-                </option>
+                <option value="overall">Overall Rank</option>
+                <option value="uploads">Most Uploads</option>
+                <option value="downloads">Most Downloads</option>
+                <option value="streak">Best Streak</option>
               </select>
             </div>
           </div>
+        </div>
 
-          {topCreator && (
-            <Link
-              href={`/profile/${topCreator.userId}`}
-              className="rounded-3xl border border-red-500/20 bg-red-500/10 p-5 transition hover:bg-red-500/15"
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] pt-4">
+          <p className="text-xs font-bold text-[var(--muted)]">
+            Showing{" "}
+            <span className="text-[var(--foreground)]">
+              {filteredCreators.length}
+            </span>{" "}
+            of {totalCreators} creators
+          </p>
+
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="text-xs font-black text-red-600 transition hover:text-red-500 dark:text-red-400"
             >
-              <div className="flex items-center gap-3">
-                <div className="grid h-12 w-12 place-items-center rounded-2xl bg-red-600 text-white">
-                  <Medal size={24} />
-                </div>
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.2em] text-red-200/70">
-                    Current #1
-                  </p>
-                  <h2 className="mt-1 line-clamp-1 text-lg font-black">
-                    {topCreator.displayName}
-                  </h2>
-                  <p className="mt-1 text-xs font-bold text-red-100/70">
-                    Level {topCreator.creatorLevel?.level || 1} ·{" "}
-                    {topCreator.creatorLevel?.title || "Starter"}
-                  </p>
-                </div>
-              </div>
-            </Link>
+              Clear search
+            </button>
           )}
+        </div>
+      </section>
+
+      {/* ERROR STATE */}
+      {error && (
+        <section className="rounded-2xl border border-red-500/25 bg-red-500/[0.06] p-6 text-center">
+          <p className="font-bold text-red-600 dark:text-red-300">
+            Unable to load creators.
+          </p>
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            Check your connection and Firestore permissions.
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-4 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-black text-white transition hover:bg-red-500"
+          >
+            Retry
+          </button>
         </section>
+      )}
 
-        {filteredCreators.length === 0 ? (
-          <section className="mt-5 rounded-[2rem] border border-white/10 bg-white/[0.04] p-8 text-center shadow-2xl shadow-black/20 sm:p-12">
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[1.5rem] border border-red-500/20 bg-red-500/10 text-red-300">
-              <Users size={38} />
-            </div>
-            <h2 className="mt-7 text-2xl font-black">No creators found</h2>
-            <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-white/55">
-              Creators will appear after they upload notes.
-            </p>
-          </section>
-        ) : (
-          <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {filteredCreators.map((creator, index) => {
-              const unlockedBadges = creator.badges.filter(
-                (badge) => badge.unlocked
-              );
+      {/* CREATOR GRID */}
+      {!error && (
+        <>
+          {filteredCreators.length === 0 ? (
+            <section className="rounded-3xl border border-[var(--border)] bg-[var(--panel)] px-5 py-16 text-center shadow-sm sm:py-20">
+              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-300">
+                <Users size={36} />
+              </div>
 
-              return (
-                <Link
-                  key={creator.userId}
-                  href={`/profile/${creator.userId}`}
-                  className="group rounded-3xl border border-white/10 bg-white/[0.035] p-4 transition hover:border-red-500/30 hover:bg-white/[0.055] sm:p-5"
+              <h2 className="mt-6 text-2xl font-black text-[var(--foreground)]">
+                {search ? "No creators found" : "No creators yet"}
+              </h2>
+
+              <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-[var(--muted)]">
+                {search
+                  ? "Try searching with a different name."
+                  : "Creators will appear here once their statistics are available."}
+              </p>
+
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="mt-6 rounded-xl bg-red-600 px-6 py-3 text-sm font-black text-white transition hover:bg-red-500"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <UserAvatar
-                      name={creator.displayName}
-                      src={creator.photoURL || ""}
-                      size="lg"
-                    />
+                  Clear Search
+                </button>
+              )}
+            </section>
+          ) : (
+            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              {filteredCreators.map((creator, index) => {
+                const unlockedBadges = creator.badges.filter(
+                  (badge) => badge.unlocked
+                );
 
-                    <div className="rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-xs font-black text-red-400">
-                    {index === 0
-                      ? "🥇"
-                      : index === 1
-                      ? "🥈"
-                      : index === 2
-                      ? "🥉"
-                      : `#${index + 1}`}
+                return (
+                  <Link
+                    key={creator.userId}
+                    href={`/profile/${creator.userId}`}
+                    className="group relative flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-red-500/35 hover:shadow-lg sm:p-6"
+                  >
+                    {/* CARD TOP */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <UserAvatar
+                          name={creator.displayName}
+                          src={creator.photoURL || ""}
+                          size="lg"
+                        />
+
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-[var(--muted)]">
+                            Creator
+                          </p>
+                          <p className="mt-1 truncate text-sm font-black text-[var(--foreground)]">
+                            {getLevelTitle(creator)}
+                          </p>
+                          <p className="mt-1 text-xs font-bold text-yellow-600 dark:text-yellow-400">
+                            Level {getLevel(creator)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div
+                        className={`shrink-0 rounded-xl border px-3 py-2 text-sm font-black ${
+                          index === 0
+                            ? "border-yellow-500/25 bg-yellow-500/10 text-yellow-700 dark:text-yellow-300"
+                            : index === 1
+                              ? "border-slate-400/25 bg-slate-400/10 text-slate-600 dark:text-slate-300"
+                              : index === 2
+                                ? "border-orange-500/25 bg-orange-500/10 text-orange-700 dark:text-orange-300"
+                                : "border-[var(--border)] bg-[var(--card-soft)] text-[var(--muted)]"
+                        }`}
+                      >
+                        {getRankLabel(index)}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="mt-5">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <div className="flex items-center gap-2">
-                        <h2 className="line-clamp-1 text-xl font-black">
+                    {/* NAME */}
+                    <div className="mt-6 min-h-[65px]">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <h3 className="truncate text-xl font-black tracking-tight text-[var(--foreground)]">
                           {creator.displayName}
-                        </h2>
+                        </h3>
 
                         {creator.verifiedCreator && (
                           <BadgeCheck
-                            size={18}
-                            className="text-blue-400 shrink-0"
+                            size={19}
+                            className="shrink-0 text-blue-500"
                           />
                         )}
                       </div>
 
-                      {unlockedBadges.length >= 3 && (
-                        <BadgeCheck
-                          size={18}
-                          className="shrink-0 text-blue-400"
-                        />
+                      <div className="mt-2 flex items-center gap-2 text-xs font-bold text-[var(--muted)]">
+                        <Sparkles size={13} className="text-red-500" />
+                        {numberFormat(creator.reputation)} Reputation
+                      </div>
+                    </div>
+
+                    {/* STATISTICS */}
+                    <div className="mt-5 grid grid-cols-3 gap-2">
+                      <MiniStat
+                        icon={<FileText size={17} />}
+                        value={creator.approvedUploads}
+                        label="Approved"
+                      />
+                      <MiniStat
+                        icon={<Download size={17} />}
+                        value={creator.totalDownloads}
+                        label="Downloads"
+                      />
+                      <MiniStat
+                        icon={<Flame size={17} />}
+                        value={creator.bestUploadStreak}
+                        label="Best Streak"
+                      />
+                    </div>
+
+                    {/* BADGES */}
+                    <div className="mt-5 min-h-[104px] rounded-xl border border-[var(--border)] bg-[var(--card-soft)] p-4">
+                      <div className="mb-3 flex items-center gap-2 text-xs font-black text-[var(--muted-strong)]">
+                        <Award size={15} className="text-yellow-500" />
+                        Achievements
+                        <span className="ml-auto text-[var(--muted)]">
+                          {unlockedBadges.length}
+                        </span>
+                      </div>
+
+                      {unlockedBadges.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {unlockedBadges.slice(0, 3).map((badge) => (
+                            <span
+                              key={badge.id}
+                              className="max-w-full truncate rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-[10px] font-black text-red-700 dark:text-red-300"
+                            >
+                              {badge.title}
+                            </span>
+                          ))}
+
+                          {unlockedBadges.length > 3 && (
+                            <span className="rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-[10px] font-black text-[var(--muted)]">
+                              +{unlockedBadges.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="pt-1 text-xs font-semibold text-[var(--muted)]">
+                          No achievements unlocked yet.
+                        </p>
                       )}
                     </div>
 
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-xs font-black text-yellow-300">
-                      Level {creator.creatorLevel?.level || 1} ·{" "}
-                      {creator.creatorLevel?.title || "Starter"}
-                    </span>
-
-                    <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-bold text-white/45">
-                      Reputation: {creator.reputation || 0}
-                    </span>
-                  </div>
-                  </div>
-
-                  <div className="mt-6 grid grid-cols-3 gap-2 sm:gap-3">
-                    <MiniStat
-                      icon={<FileText size={18} />}
-                      value={creator.approvedUploads}
-                      label="Approved"
-                    />
-                    <MiniStat
-                      icon={<Download size={18} />}
-                      value={creator.totalDownloads}
-                      label="Downloads"
-                    />
-                    <MiniStat
-                      icon={<Crown size={18} />}
-                      value={creator.creatorLevel?.level || 1}
-                      label="Level"
-                    />
-                  </div>
-
-                  <div className="mt-5 rounded-2xl border border-white/10 bg-black/25 p-3">
-                    <div className="mb-3 flex items-center gap-2 text-xs font-black text-white/60">
-                      <Sparkles size={15} className="text-red-300" />
-                      Badges
+                    {/* PROFILE LINK */}
+                    <div className="mt-5 flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--card-soft)] px-4 py-3 text-sm font-black transition group-hover:border-red-500/30 group-hover:bg-red-600">
+                      <span className="text-[var(--foreground)] transition group-hover:text-white">
+                        View Profile
+                      </span>
+                      <ArrowUpRight
+                        size={18}
+                        className="text-[var(--muted)] transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-white"
+                      />
                     </div>
-
-                    {unlockedBadges.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {unlockedBadges.slice(0, 3).map((badge) => (
-                          <span
-                            key={badge.id}
-                            className="rounded-full border border-red-400/20 bg-red-500/10 px-3 py-1 text-[10px] font-black text-red-100"
-                          >
-                            {badge.title}
-                          </span>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-xs font-semibold text-white/35">
-                        No badges unlocked yet.
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="mt-6 rounded-2xl bg-red-600 px-5 py-3 text-center text-sm font-black text-white transition group-hover:bg-red-500">
-                    View Profile
-                  </div>
-                </Link>
-              );
-            })}
-          </section>
-        )}
-      </div>
+                  </Link>
+                );
+              })}
+            </section>
+          )}
+        </>
+      )}
+    </main>
   );
 }
 
-function HeroStat({ label, value }: { label: string; value: number }) {
+function HeroStat({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+}) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/25 p-4 text-center">
-      <p className="text-xl font-black sm:text-2xl">{value}</p>
-      <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 transition hover:border-red-500/25 sm:p-5">
+      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-500/10 text-red-600 dark:text-red-300">
+        {icon}
+      </div>
+
+      <p className="mt-4 text-xl font-black tracking-tight text-[var(--foreground)] sm:text-2xl">
+        {numberFormat(value)}
+      </p>
+
+      <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-[var(--muted)] sm:text-xs">
+        {label}
+      </p>
+    </div>
+  );
+}
+
+function FeatureStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
+  return (
+    <div>
+      <p className="text-xl font-black text-[var(--foreground)] sm:text-2xl">
+        {numberFormat(value)}
+      </p>
+      <p className="mt-1 text-[10px] font-black uppercase tracking-wider text-[var(--muted)] sm:text-xs">
         {label}
       </p>
     </div>
@@ -483,12 +672,18 @@ function MiniStat({
   label: string;
 }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-white/10 bg-black/25 p-3 text-center">
-      <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-xl bg-red-500/10 text-red-300">
+    <div className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card-soft)] p-3 text-center">
+      <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-xl bg-red-500/10 text-red-600 dark:text-red-300">
         {icon}
       </div>
-      <p className="mt-2 truncate text-lg font-black">{value}</p>
-      <p className="truncate text-[10px] font-bold text-white/40">{label}</p>
+
+      <p className="mt-2 truncate text-base font-black text-[var(--foreground)] sm:text-lg">
+        {numberFormat(value)}
+      </p>
+
+      <p className="mt-1 truncate text-[9px] font-black uppercase tracking-wide text-[var(--muted)] sm:text-[10px]">
+        {label}
+      </p>
     </div>
   );
 }

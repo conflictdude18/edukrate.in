@@ -6,6 +6,6 @@ export default function robots(): MetadataRoute.Robots {
       userAgent: "*",
       allow: "/",
     },
-    sitemap: "https://noteswallah.co.in/sitemap.xml",
+    sitemap: "https://edukrate.in/sitemap.xml",
   };
 }

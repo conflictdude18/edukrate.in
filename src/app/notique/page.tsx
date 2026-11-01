@@ -1,11 +1,16 @@
-"use client";
 
-import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+"use client";
+import Image from "next/image";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
-import { useRouter } from "next/navigation";
 import {
   addDoc,
   collection,
@@ -17,7 +22,16 @@ import {
   serverTimestamp,
   setDoc,
 } from "firebase/firestore";
-import { Home, Image as ImageIcon, Menu, Send, Upload } from "lucide-react";
+import {
+  ArrowUp,
+  Image as ImageIcon,
+  Menu,
+  Paperclip,
+  Plus,
+  X,
+  FileText,
+} from "lucide-react";
+
 export const dynamic = "force-dynamic";
 
 import NotiqueSidebar from "@/components/notique/NotiqueSidebar";
@@ -48,12 +62,11 @@ type PdfTextItem = {
 const welcomeMessage: ChatMessage = {
   role: "assistant",
   content:
-    "👋 Hi! I’m **Notique AI**. Upload notes, PDFs, or images and I’ll help you study smarter.",
+    "Hi! I'm **Notique AI**, your personal study assistant.\n\nYou can upload notes, PDFs, or images and ask me to explain concepts, summarise topics, or help you understand your study material.\n\nWhat would you like to study today?",
 };
 
 export default function NotiquePage() {
   const { user, loading } = useAuth();
-  const router = useRouter();
 
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -64,50 +77,66 @@ export default function NotiquePage() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState("");
 
-  const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage]);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    welcomeMessage,
+  ]);
   const [chats, setChats] = useState<NotiqueChat[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isFreshChat, setIsFreshChat] = useState(true);
 
-  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const pdfInputRef = useRef<HTMLInputElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Scroll only the message history. Never scroll the document.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const container = chatScrollRef.current;
+    if (!container) return;
+
+    const frame = requestAnimationFrame(() => {
+      container.scrollTop = container.scrollHeight;
+    });
+
+    return () => cancelAnimationFrame(frame);
   }, [messages, sending]);
 
-  useEffect(() => {
-    if (loading) return;
-    if (!user) router.push("/signin");
-  }, [user, loading, router]);
-
+  // Load chat history.
   useEffect(() => {
     if (!user) return;
 
     const chatsRef = collection(db, "notiqueChats", user.uid, "chats");
     const q = query(chatsRef, orderBy("updatedAt", "desc"));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const loadedChats = snapshot.docs.map((item) => {
-        const data = item.data();
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const loadedChats = snapshot.docs.map((item) => {
+          const data = item.data();
 
-        return {
-          id: item.id,
-          title: data.title || "New Chat",
-          lastMessage: data.lastMessage || "",
-        };
-      }) as NotiqueChat[];
+          return {
+            id: item.id,
+            title: data.title || "New Chat",
+            lastMessage: data.lastMessage || "",
+          };
+        }) as NotiqueChat[];
 
-      setChats(loadedChats);
+        setChats(loadedChats);
 
-      if (!activeChatId && !isFreshChat && loadedChats.length > 0) {
-        setActiveChatId(loadedChats[0].id);
+        if (!activeChatId && !isFreshChat && loadedChats.length > 0) {
+          setActiveChatId(loadedChats[0].id);
+        }
+      },
+      (error) => {
+        console.error("NOTIQUE CHATS ERROR:", error);
       }
-    });
+    );
 
     return () => unsubscribe();
   }, [user, activeChatId, isFreshChat]);
 
+  // Load messages for the selected chat.
   useEffect(() => {
     if (!user || !activeChatId) {
       setMessages([welcomeMessage]);
@@ -125,19 +154,27 @@ export default function NotiquePage() {
 
     const q = query(messagesRef, orderBy("createdAt", "asc"));
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const loadedMessages = snapshot.docs.map((item) => {
-        const data = item.data();
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const loadedMessages = snapshot.docs.map((item) => {
+          const data = item.data();
 
-        return {
-          role: data.role,
-          content: data.content,
-          attachments: data.attachments || [],
-        };
-      }) as ChatMessage[];
+          return {
+            role: data.role,
+            content: data.content,
+            attachments: data.attachments || [],
+          };
+        }) as ChatMessage[];
 
-      setMessages(loadedMessages.length > 0 ? loadedMessages : [welcomeMessage]);
-    });
+        setMessages(
+          loadedMessages.length > 0 ? loadedMessages : [welcomeMessage]
+        );
+      },
+      (error) => {
+        console.error("NOTIQUE MESSAGES ERROR:", error);
+      }
+    );
 
     return () => unsubscribe();
   }, [user, activeChatId]);
@@ -168,7 +205,14 @@ export default function NotiquePage() {
     if (!user) return;
 
     await addDoc(
-      collection(db, "notiqueChats", user.uid, "chats", chatId, "messages"),
+      collection(
+        db,
+        "notiqueChats",
+        user.uid,
+        "chats",
+        chatId,
+        "messages"
+      ),
       {
         role,
         content,
@@ -195,19 +239,38 @@ export default function NotiquePage() {
             updatedAt: serverTimestamp(),
           };
 
-    await setDoc(doc(db, "notiqueChats", user.uid, "chats", chatId), chatUpdate, {
-      merge: true,
-    });
+    await setDoc(
+      doc(db, "notiqueChats", user.uid, "chats", chatId),
+      chatUpdate,
+      { merge: true }
+    );
   }
 
-  async function handleNewChat() {
-    setIsFreshChat(true);
-    setActiveChatId(null);
-    setMessages([welcomeMessage]);
+  function clearSelectedImage() {
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview);
+    }
+
+    setSelectedImage(null);
+    setImagePreview("");
+  }
+
+  function resetComposer() {
     setMessage("");
     setSelectedPDF(null);
     setPdfText("");
     clearSelectedImage();
+
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
+  }
+
+  function handleNewChat() {
+    setIsFreshChat(true);
+    setActiveChatId(null);
+    setMessages([welcomeMessage]);
+    resetComposer();
     setSending(false);
     setSidebarOpen(false);
   }
@@ -231,14 +294,19 @@ export default function NotiquePage() {
   function handleSelectChat(chatId: string) {
     setIsFreshChat(false);
     setActiveChatId(chatId);
+    resetComposer();
     setSidebarOpen(false);
   }
 
-  async function handlePDFUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handlePDFUpload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
+      if (file.type !== "application/pdf") {
+        throw new Error("Please select a PDF file.");
+      }
+
       setSelectedPDF(file);
       setPdfText("");
 
@@ -249,7 +317,9 @@ export default function NotiquePage() {
         import.meta.url
       ).toString();
 
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const pdf = await pdfjsLib.getDocument({
+        data: arrayBuffer,
+      }).promise;
 
       let extractedText = "";
 
@@ -258,13 +328,18 @@ export default function NotiquePage() {
         const content = await page.getTextContent();
 
         extractedText +=
-          content.items.map((item) => (item as PdfTextItem).str).join(" ") +
-          "\n";
+          content.items
+            .map((item) => (item as PdfTextItem).str)
+            .join(" ") + "\n";
       }
 
       setPdfText(extractedText);
+
+      if (!extractedText.trim()) {
+        console.warn("This PDF contains no extractable text.");
+      }
     } catch (error) {
-      console.error(error);
+      console.error("PDF UPLOAD ERROR:", error);
       setSelectedPDF(null);
       setPdfText("");
     } finally {
@@ -272,21 +347,23 @@ export default function NotiquePage() {
     }
   }
 
-  function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleImageUpload(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    if (!file.type.startsWith("image/")) {
+      e.target.value = "";
+      return;
+    }
+
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview);
+    }
 
     setSelectedImage(file);
     setImagePreview(URL.createObjectURL(file));
-    e.target.value = "";
-  }
 
-  function clearSelectedImage() {
-    if (imagePreview) URL.revokeObjectURL(imagePreview);
-    setSelectedImage(null);
-    setImagePreview("");
+    e.target.value = "";
   }
 
   function fileToBase64(file: File): Promise<string> {
@@ -304,36 +381,44 @@ export default function NotiquePage() {
   }
 
   async function handleSend() {
-    if ((!message.trim() && !selectedPDF && !selectedImage) || sending || !user) {
+    if (
+      (!message.trim() && !selectedPDF && !selectedImage) ||
+      sending ||
+      !user
+    ) {
       return;
     }
 
     const userMessage = message.trim();
+    const pdfToSend = selectedPDF;
+    const imageToSend = selectedImage;
+    const imagePreviewToSend = imagePreview;
+    const extractedPdfText = pdfText;
 
-    const userContent = selectedPDF
-      ? `📄 ${selectedPDF.name}${
-          userMessage ? `\n\n${userMessage}` : "\n\nSummarise this PDF."
+    const userContent = pdfToSend
+      ? `📄 ${pdfToSend.name}${
+          userMessage
+            ? `\n\n${userMessage}`
+            : "\n\nSummarise this PDF."
         }`
-      : selectedImage
+      : imageToSend
         ? userMessage || "Describe this image."
         : userMessage;
-
-    const localImagePreview = selectedImage ? imagePreview : undefined;
 
     setMessages((prev) => [
       ...prev,
       {
         role: "user",
         content: userContent,
-        imagePreview: localImagePreview,
-        attachments: selectedPDF
+        imagePreview: imagePreviewToSend || undefined,
+        attachments: pdfToSend
           ? [
               {
                 type: "pdf",
-                name: selectedPDF.name,
+                name: pdfToSend.name,
                 url: "",
                 path: "",
-                size: selectedPDF.size,
+                size: pdfToSend.size,
               },
             ]
           : [],
@@ -343,20 +428,27 @@ export default function NotiquePage() {
     setMessage("");
     setSending(true);
 
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
+
     try {
       const chatId =
         activeChatId ||
         (await createChat(
-          userContent.replace(/📄|🖼️/g, "").trim().slice(0, 40) || "New Chat"
+          userContent.replace(/📄|🖼️/g, "").trim().slice(0, 40) ||
+            "New Chat"
         ));
 
-      if (!chatId) return;
+      if (!chatId) {
+        throw new Error("Could not create a chat.");
+      }
 
       setIsFreshChat(false);
 
       const filesToUpload = [
-        ...(selectedPDF ? [selectedPDF] : []),
-        ...(selectedImage ? [selectedImage] : []),
+        ...(pdfToSend ? [pdfToSend] : []),
+        ...(imageToSend ? [imageToSend] : []),
       ];
 
       const uploadedAttachments = await uploadNotiqueAttachments(
@@ -365,15 +457,23 @@ export default function NotiquePage() {
         chatId
       );
 
-      await saveMessage(chatId, "user", userContent, uploadedAttachments);
+      await saveMessage(
+        chatId,
+        "user",
+        userContent,
+        uploadedAttachments
+      );
 
-      const finalPrompt = selectedPDF
+      const finalPrompt = pdfToSend
         ? `
 User instruction:
-${userMessage || "Summarise this PDF in simple student-friendly points."}
+${
+  userMessage ||
+  "Summarise this PDF in simple student-friendly points."
+}
 
 PDF content:
-${pdfText.slice(0, 12000)}
+${extractedPdfText.slice(0, 12000)}
 `
         : userMessage || "Explain this image clearly.";
 
@@ -384,16 +484,20 @@ ${pdfText.slice(0, 12000)}
         },
         body: JSON.stringify({
           message: finalPrompt,
-          image: selectedImage
+          image: imageToSend
             ? {
-                base64: await fileToBase64(selectedImage),
-                mimeType: selectedImage.type,
+                base64: await fileToBase64(imageToSend),
+                mimeType: imageToSend.type,
               }
             : null,
         }),
       });
 
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Notique request failed.");
+      }
 
       const assistantReply =
         data.reply || data.error || "Sorry, I could not generate a reply.";
@@ -407,17 +511,34 @@ ${pdfText.slice(0, 12000)}
       ]);
 
       await saveMessage(chatId, "assistant", assistantReply);
-    } catch (error) {
-      console.error(error);
+      } catch (error) {
+        console.error("NOTIQUE SEND ERROR:", error);
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: "Something went wrong while contacting Notique AI.",
-        },
-      ]);
-    } finally {
+        const errorMessage =
+          error instanceof Error ? error.message : "";
+
+        let userFriendlyMessage =
+          "Something went wrong while contacting Notique AI. Please try again.";
+
+        if (
+          errorMessage.toLowerCase().includes("message is too long") ||
+          errorMessage.toLowerCase().includes("upload a smaller pdf")
+        ) {
+          userFriendlyMessage =
+            "Your message or PDF is too large for Notique to process.\n\nPlease upload a smaller PDF or try sending a shorter message.";
+        } else if (errorMessage) {
+          userFriendlyMessage = errorMessage;
+        }
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: `⚠️ **Unable to process your request**\n\n${userFriendlyMessage}`,
+          },
+        ]);
+      }
+    finally {
       setSelectedPDF(null);
       setPdfText("");
       clearSelectedImage();
@@ -425,16 +546,42 @@ ${pdfText.slice(0, 12000)}
     }
   }
 
+  function handleTextareaKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.nativeEvent.isComposing) return;
+
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      void handleSend();
+    }
+  }
+
+  function handleTextareaChange(value: string) {
+    setMessage(value);
+
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = `${Math.min(
+        textareaRef.current.scrollHeight,
+        128
+      )}px`;
+    }
+  }
+
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black text-white">
-        Loading Notique...
+      <div className="flex h-full min-h-0 w-full flex-1 items-center justify-center bg-[var(--background)] text-[var(--foreground)]">
+        <div className="flex items-center gap-3 text-sm font-medium text-[var(--muted)]">
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--border)] border-t-red-500" />
+          Loading Notique...
+        </div>
       </div>
     );
   }
 
+  if (!user) return null;
+
   return (
-    <div className="flex h-screen overflow-hidden bg-black text-white">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
       <NotiqueSidebar
         chats={chats}
         activeChatId={activeChatId}
@@ -445,223 +592,339 @@ ${pdfText.slice(0, 12000)}
         onClose={() => setSidebarOpen(false)}
       />
 
-      <main className="flex min-h-screen flex-1 flex-col">
-        <div className="sticky top-0 z-20 border-b border-white/10 bg-black/80 backdrop-blur-xl">
-          <div className="flex w-full items-center justify-between gap-3 px-4 py-4 lg:px-8">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setSidebarOpen(true)}
-                className="rounded-xl border border-white/10 bg-white/5 p-2 text-zinc-300 lg:hidden"
-                aria-label="Open chat sidebar"
-              >
-                <Menu className="h-5 w-5" />
-              </button>
+      <main className="relative flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Header */}
 
-              <Link
-                href="/"
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2 text-xs font-black text-white/70 transition hover:bg-white/[0.08] hover:text-white"
-              >
-                <Home size={16} />
-                Home
-              </Link>
-            </div>
 
-            <button
-              type="button"
-              onClick={handleNewChat}
-              className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-black text-zinc-300 transition hover:bg-white/10 hover:text-white"
-            >
-              New Chat
-            </button>
+      {/* Header */}
+      <header className="z-20 flex h-14 shrink-0 items-center justify-between bg-[var(--background)] px-3 sm:px-5 lg:px-7">
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open chat history"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--muted-strong)] transition hover:bg-[var(--card-soft)] lg:hidden"
+          >
+            <Menu size={20} />
+          </button>
+
+          <div className="flex items-center gap-2.5">
+            <Image
+              src="/notique-icon.png"
+              alt="Notique"
+              width={32}
+              height={32}
+              className="h-8 w-8 rounded-lg object-contain"
+              priority
+            />
+            <span className="text-base font-semibold tracking-tight">
+              Notique
+            </span>
           </div>
         </div>
 
-        <div className="flex h-[calc(100vh-73px)] flex-1 flex-col px-3 py-3 lg:px-8 lg:py-6">
-          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto py-3 pr-1 lg:space-y-6 lg:py-6">
-            {messages.map((msg, index) => (
-              <div
-                key={index}
-                className={`flex ${
-                  msg.role === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
-                <div
-                  className={`max-w-[92%] rounded-3xl px-4 py-3 text-sm leading-relaxed md:max-w-[75%] md:px-5 md:py-4 ${
-                    msg.role === "user"
-                      ? "bg-red-600 text-white"
-                      : "border border-white/10 bg-white/[0.045] text-zinc-200"
-                  }`}
-                >
-                  {msg.role === "user" ? (
-                    <div className="space-y-3">
-                      {msg.imagePreview && (
-                        <img
-                          src={msg.imagePreview}
-                          alt="Uploaded"
-                          className="max-h-64 w-full rounded-2xl object-cover"
-                        />
-                      )}
+        <button
+          type="button"
+          onClick={handleNewChat}
+          className="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-[var(--muted-strong)] transition hover:bg-[var(--card-soft)] hover:text-[var(--foreground)]"
+        >
+          <Plus size={16} />
+          <span>New chat</span>
+        </button>
+      </header>
 
-                      {msg.attachments?.map((file, fileIndex) =>
-                        file.type === "image" && file.url ? (
-                          <img
-                            key={fileIndex}
-                            src={file.url}
-                            alt={file.name}
-                            className="max-h-64 w-full rounded-2xl object-cover"
-                          />
-                        ) : file.type === "pdf" ? (
-                          <a
-                            key={fileIndex}
-                            href={file.url || "#"}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm"
-                          >
-                            📄 {file.name}
-                          </a>
-                        ) : null
-                      )}
+        {/* Chat content: history scrolls, composer stays fixed below it. */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div
+            ref={chatScrollRef}
+            className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
+          >
+            <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-3 pb-6 pt-5 sm:gap-8 sm:px-6 sm:pb-8 sm:pt-8">
+              {messages.map((msg, index) => {
+                const isUser = msg.role === "user";
 
-                      <div className="whitespace-pre-wrap">{msg.content}</div>
-                    </div>
-                  ) : (
-                    <div className="prose prose-invert max-w-none prose-p:leading-7 prose-pre:bg-black/40 prose-pre:text-white prose-code:text-red-200">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {msg.content}
-                      </ReactMarkdown>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {sending && (
-              <div className="flex justify-start">
-                <div className="flex items-center gap-2 rounded-3xl border border-white/10 bg-white/[0.045] px-5 py-4 text-sm text-zinc-400">
-                  <span>Notique is thinking</span>
-                  <span className="flex gap-1">
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400" />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:120ms]" />
-                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-400 [animation-delay:240ms]" />
-                  </span>
-                </div>
-              </div>
-            )}
-
-            <div ref={bottomRef} />
-          </div>
-
-          <div className="shrink-0 pb-3 pt-3">
-            <div className="rounded-3xl border border-white/10 bg-zinc-950/95 p-3 backdrop-blur-xl">
-              {selectedPDF && (
-                <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-zinc-300">
-                  <span className="truncate">📄 {selectedPDF.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedPDF(null);
-                      setPdfText("");
-                    }}
-                    className="shrink-0 text-zinc-400 hover:text-white"
+                return (
+                  <div
+                    key={index}
+                    className={`flex min-w-0 gap-3 sm:gap-4 ${
+                      isUser ? "justify-end" : "justify-start"
+                    }`}
                   >
-                    Remove
-                  </button>
+                    {!isUser && (
+                      <div className="mt-1 h-8 w-8 shrink-0 overflow-hidden rounded-full">
+                        <Image
+                          src="/notique-icon.png"
+                          alt="Notique"
+                          width={32}
+                          height={32}
+                          className="h-full w-full object-contain"
+                        />
+                      </div>
+                    )}
+
+                    <div
+                      className={`min-w-0 ${
+                        isUser
+                          ? "max-w-[88%] rounded-3xl bg-[var(--card-soft)] px-4 py-3 sm:max-w-[80%] sm:px-5"
+                          : "flex-1 pt-1"
+                      }`}
+                    >
+                      {isUser ? (
+                        <div className="space-y-3">
+                          {msg.imagePreview && (
+                            <img
+                              src={msg.imagePreview}
+                              alt="Uploaded image"
+                              className="max-h-72 max-w-full rounded-xl object-contain"
+                            />
+                          )}
+
+                          {msg.attachments?.map((file, fileIndex) =>
+                            file.type === "image" && file.url ? (
+                              <img
+                                key={fileIndex}
+                                src={file.url}
+                                alt={file.name}
+                                className="max-h-72 max-w-full rounded-xl object-contain"
+                              />
+                            ) : file.type === "pdf" ? (
+                              <div
+                                key={fileIndex}
+                                className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-3"
+                              >
+                                <FileText
+                                  size={20}
+                                  className="shrink-0 text-red-500"
+                                />
+                                <span className="min-w-0 truncate text-sm font-medium">
+                                  {file.name}
+                                </span>
+                              </div>
+                            ) : null
+                          )}
+
+                          <div className="whitespace-pre-wrap break-words text-sm leading-7 text-[var(--foreground)]">
+                            {msg.content}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="notique-markdown min-w-0 break-words text-sm leading-7 text-[var(--foreground)]">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              a: ({ ...props }) => (
+                                <a
+                                  {...props}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-semibold text-red-500 underline underline-offset-2"
+                                />
+                              ),
+                              table: ({ ...props }) => (
+                                <div className="my-4 w-full overflow-x-auto rounded-xl border border-[var(--border)]">
+                                  <table
+                                    {...props}
+                                    className="w-full min-w-[400px] border-collapse text-left text-sm"
+                                  />
+                                </div>
+                              ),
+                              th: ({ ...props }) => (
+                                <th
+                                  {...props}
+                                  className="border-b border-[var(--border)] bg-[var(--card-soft)] px-3 py-2 font-bold"
+                                />
+                              ),
+                              td: ({ ...props }) => (
+                                <td
+                                  {...props}
+                                  className="border-b border-[var(--border)] px-3 py-2 align-top"
+                                />
+                              ),
+                              pre: ({ ...props }) => (
+                                <pre
+                                  {...props}
+                                  className="my-4 max-w-full overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card-soft)] p-4 text-xs leading-6"
+                                />
+                              ),
+                              code: ({ className, children, ...props }) => (
+                                <code
+                                  {...props}
+                                  className={`break-words font-mono text-[0.9em] ${
+                                    className ||
+                                    "rounded bg-[var(--card-soft)] px-1.5 py-0.5 text-red-500"
+                                  }`}
+                                >
+                                  {children}
+                                </code>
+                              ),
+                            }}
+                          >
+                            {msg.content}
+                          </ReactMarkdown>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {sending && (
+                <div className="flex items-start gap-3 sm:gap-4">
+                  <div className="mt-1 h-8 w-8 shrink-0 overflow-hidden rounded-full">
+                    <Image
+                      src="/notique-icon.png"
+                      alt="Notique"
+                      width={32}
+                      height={32}
+                      className="h-full w-full object-contain"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2 text-sm text-[var(--muted)]">
+                    <span>Thinking</span>
+                    <span className="flex gap-1">
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-red-500" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-red-500 [animation-delay:120ms]" />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-red-500 [animation-delay:240ms]" />
+                    </span>
+                  </div>
                 </div>
               )}
+            </div>
+          </div>
 
-              {selectedImage && (
-                <div className="mb-3 rounded-2xl border border-white/10 bg-white/5 p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={imagePreview}
-                        alt="Preview"
-                        className="h-14 w-14 rounded-xl object-cover"
-                      />
+          {/* Composer remains a non-scrolling sibling of chat history. */}
+          <div className="relative z-30 w-full shrink-0 border-t border-[var(--border)] bg-[var(--background)] px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 sm:border-t-0 sm:px-6 sm:pb-5 sm:pt-4">
+            <div className="mx-auto max-w-3xl">
+              <div className="rounded-[26px] border border-[var(--border)] bg-[var(--card)] p-2 shadow-lg shadow-black/5 transition focus-within:border-red-500/50 sm:p-3">
+                {selectedPDF && (
+                  <div className="mb-3 flex items-center gap-3 rounded-xl bg-[var(--card-soft)] px-3 py-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-500">
+                      <FileText size={19} />
+                    </div>
 
-                      <div>
-                        <p className="max-w-[170px] truncate text-sm text-white">
-                          {selectedImage.name}
-                        </p>
-                        <p className="text-xs text-zinc-400">
-                          Image ready to send
-                        </p>
-                      </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-[var(--foreground)]">
+                        {selectedPDF.name}
+                      </p>
+                      <p className="text-xs text-[var(--muted)]">
+                        PDF attached
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedPDF(null);
+                        setPdfText("");
+                      }}
+                      aria-label="Remove PDF"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] transition hover:bg-red-500/10 hover:text-red-500"
+                    >
+                      <X size={17} />
+                    </button>
+                  </div>
+                )}
+
+                {selectedImage && (
+                  <div className="mb-3 flex items-center gap-3 rounded-xl bg-[var(--card-soft)] p-3">
+                    <img
+                      src={imagePreview}
+                      alt="Selected image preview"
+                      className="h-14 w-14 shrink-0 rounded-lg object-cover"
+                    />
+
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-[var(--foreground)]">
+                        {selectedImage.name}
+                      </p>
+                      <p className="text-xs text-[var(--muted)]">
+                        Image ready to send
+                      </p>
                     </div>
 
                     <button
                       type="button"
                       onClick={clearSelectedImage}
-                      className="text-sm text-zinc-400 hover:text-white"
+                      aria-label="Remove image"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] transition hover:bg-red-500/10 hover:text-red-500"
                     >
-                      Remove
+                      <X size={17} />
                     </button>
                   </div>
-                </div>
-              )}
+                )}
 
-              <div className="flex items-end gap-2">
-                <label className="shrink-0 cursor-pointer rounded-2xl p-3 text-zinc-400 transition hover:bg-white/10 hover:text-white">
-                  <Upload className="h-5 w-5" />
+                <div className="flex items-end gap-1.5 sm:gap-2">
+                  <button
+                    type="button"
+                    onClick={() => pdfInputRef.current?.click()}
+                    disabled={sending}
+                    aria-label="Attach PDF"
+                    title="Attach PDF"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--muted)] transition hover:bg-[var(--card-soft)] hover:text-red-500 disabled:opacity-40 sm:h-11 sm:w-11"
+                  >
+                    <Paperclip size={19} />
+                  </button>
+
                   <input
+                    ref={pdfInputRef}
                     type="file"
-                    accept=".pdf"
+                    accept=".pdf,application/pdf"
                     hidden
                     onChange={handlePDFUpload}
                   />
-                </label>
 
-                <label className="shrink-0 cursor-pointer rounded-2xl p-3 text-zinc-400 transition hover:bg-white/10 hover:text-white">
-                  <ImageIcon className="h-5 w-5" />
+                  <button
+                    type="button"
+                    onClick={() => imageInputRef.current?.click()}
+                    disabled={sending}
+                    aria-label="Attach image"
+                    title="Attach image"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--muted)] transition hover:bg-[var(--card-soft)] hover:text-red-500 disabled:opacity-40 sm:h-11 sm:w-11"
+                  >
+                    <ImageIcon size={19} />
+                  </button>
+
                   <input
+                    ref={imageInputRef}
                     type="file"
                     accept="image/*"
                     hidden
                     onChange={handleImageUpload}
                   />
-                </label>
 
-                <textarea
-                  value={message}
-                  onChange={(e) => {
-                    setMessage(e.target.value);
-                    e.target.style.height = "auto";
-                    e.target.style.height = `${e.target.scrollHeight}px`;
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend();
+                  <textarea
+                    ref={textareaRef}
+                    value={message}
+                    onChange={(e) => handleTextareaChange(e.target.value)}
+                    onKeyDown={handleTextareaKeyDown}
+                    placeholder={
+                      selectedPDF
+                        ? "Ask something about this PDF..."
+                        : selectedImage
+                          ? "Ask something about this image..."
+                          : "Message Notique..."
                     }
-                  }}
-                  placeholder={
-                    selectedPDF
-                      ? "Ask about this PDF..."
-                      : selectedImage
-                        ? "Ask about this image..."
-                        : "Ask Notique anything..."
-                  }
-                  rows={1}
-                  className="max-h-32 min-h-[44px] flex-1 resize-none overflow-y-auto rounded-2xl bg-transparent px-3 py-3 text-sm outline-none placeholder:text-zinc-500"
-                />
+                    rows={1}
+                    disabled={sending}
+                    className="max-h-32 min-h-[44px] min-w-0 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-3 text-[16px] leading-6 text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] disabled:opacity-50 sm:text-sm"
+                  />
 
-                <button
-                  type="button"
-                  onClick={handleSend}
-                  disabled={
-                    sending || (!message.trim() && !selectedPDF && !selectedImage)
-                  }
-                  className="shrink-0 rounded-2xl bg-red-600 p-3 text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <Send className="h-5 w-5" />
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleSend}
+                    disabled={
+                      sending ||
+                      (!message.trim() && !selectedPDF && !selectedImage)
+                    }
+                    aria-label="Send message"
+                    title="Send message"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-600 text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40 sm:h-11 sm:w-11"
+                  >
+                    <ArrowUp size={20} strokeWidth={2.5} />
+                  </button>
+                </div>
               </div>
-
-              <p className="mt-3 text-center text-[11px] leading-snug text-zinc-500">
-                Notique is free for all students. Always verify important answers.
-              </p>
             </div>
           </div>
         </div>

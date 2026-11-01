@@ -1,279 +1,309 @@
+
 "use client";
 
-import type React from "react";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
+import Image from "next/image";
 import Link from "next/link";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  updateProfile,
+} from "firebase/auth";
+import { auth } from "@/firebase/firebase";
 import {
   ArrowRight,
-  CheckCircle2,
-  Loader2,
-  Lock,
-  Mail,
-  ShieldCheck,
-  Sparkles,
+  Eye,
+  EyeOff,
   User,
+  Mail,
+  LockKeyhole,
+  ShieldCheck,
+  CheckCircle2,
+  GraduationCap,
 } from "lucide-react";
-
-import { auth } from "@/firebase/firebase";
 
 export default function SignUpPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  function getFirebaseErrorMessage(message: string) {
-    if (message.includes("email-already-in-use")) {
-      return "This email is already registered.";
+  const getFirebaseErrorMessage = (code: string) => {
+    switch (code) {
+      case "auth/email-already-in-use":
+        return "This email is already registered. Try signing in instead.";
+      case "auth/weak-password":
+        return "Password must contain at least 6 characters.";
+      case "auth/invalid-email":
+        return "Please enter a valid email address.";
+      case "auth/network-request-failed":
+        return "Network error. Check your internet connection.";
+      default:
+        return "Unable to create your account. Please try again.";
     }
+  };
 
-    if (message.includes("weak-password")) {
-      return "Password should be at least 6 characters.";
-    }
-
-    if (message.includes("invalid-email")) {
-      return "Please enter a valid email address.";
-    }
-
-    if (message.includes("network-request-failed")) {
-      return "Network error. Check your internet.";
-    }
-
-    return "Something went wrong. Please try again.";
-  }
-
-  async function handleSignup(e: React.FormEvent<HTMLFormElement>) {
+  const handleSignup = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-
     setError("");
     setLoading(true);
 
     try {
-      const userCred = await createUserWithEmailAndPassword(
+      const userCredential = await createUserWithEmailAndPassword(
         auth,
-        email,
+        email.trim(),
         password
       );
 
-    await updateProfile(userCred.user, {
-      displayName: name.trim(),
-    });
+      await updateProfile(userCredential.user, {
+        displayName: name.trim(),
+      });
 
-    await fetch("/api/send-welcome-email", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email: userCred.user.email,
-        name: name.trim() || "Student",
-      }),
-    });
+      await fetch("/api/send-welcome-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: userCredential.user.email,
+          name: name.trim() || "Student",
+        }),
+      });
 
-    setTimeout(() => {
       window.location.href = "/dashboard";
-    }, 300);
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(getFirebaseErrorMessage(err.message));
-      } else {
-        setError("Something went wrong. Please try again.");
-      }
-    } finally {
+    } catch (err: any) {
+      setError(getFirebaseErrorMessage(err?.code || ""));
       setLoading(false);
     }
-  }
+  };
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#050505] px-4 py-4 text-white sm:px-6 sm:py-6 lg:px-8">
-      <div className="mx-auto grid max-w-6xl gap-5 py-4 md:py-6 lg:min-h-[82vh] lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
-        <section className="relative hidden overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-br from-white/10 via-white/[0.04] to-red-500/10 p-8 shadow-2xl shadow-black/30 lg:block">
-          <div className="absolute -right-10 -top-10 h-44 w-44 rounded-full bg-red-500/20 blur-3xl" />
+    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1600px] items-center justify-center p-3 sm:p-6 lg:p-10">
+        <div className="grid min-h-[min(820px,calc(100vh-48px))] w-full max-w-[1240px] overflow-hidden rounded-[28px] border border-[var(--border)] bg-[var(--panel)] shadow-2xl shadow-black/10 lg:grid-cols-[1fr_0.95fr]">
 
-          <div className="relative flex h-full flex-col justify-between">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-black text-red-300">
-                <Sparkles size={16} />
-                Join NotesWallah
+          {/* Desktop branding panel */}
+          <section className="relative hidden overflow-hidden bg-[#160707] p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
+            <div className="pointer-events-none absolute -right-32 -top-32 h-[430px] w-[430px] rounded-full bg-red-600/20 blur-[100px]" />
+            <div className="pointer-events-none absolute -bottom-40 -left-24 h-[420px] w-[420px] rounded-full bg-red-900/30 blur-[100px]" />
+
+            <Link href="/" className="relative z-10 flex w-fit items-center gap-3">
+              <div className="relative h-12 w-12 shrink-0">
+                <Image
+                  src="/edukratelogo.png"
+                  alt="Edukrate logo"
+                  fill
+                  sizes="48px"
+                  className="object-contain"
+                  priority
+                />
+              </div>
+              <span className="text-2xl font-black tracking-tight">
+                Edukrate
+              </span>
+            </Link>
+
+            <div className="relative z-10 my-12 max-w-xl">
+              <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-red-400/25 bg-red-500/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-red-300">
+                <GraduationCap size={15} />
+                Start your journey
               </div>
 
-              <h1 className="mt-8 text-5xl font-black leading-tight tracking-tight">
-                Create your
-                <span className="block text-red-500">student account.</span>
+              <h1 className="text-5xl font-black leading-[1.12] tracking-tight xl:text-6xl">
+                Make learning
+                <br />
+                more meaningful.
+                <br />
+                <span className="text-red-500">Start with us.</span>
               </h1>
 
-              <p className="mt-5 max-w-md text-sm leading-7 text-white/60">
-                Upload notes, save useful PDFs, follow contributors and help
-                other students learn better.
+              <p className="mt-7 max-w-md text-base leading-8 text-white/60">
+                Create your Edukrate account and become part of a community
+                built around sharing knowledge and learning together.
               </p>
-            </div>
 
-            <div className="grid gap-3">
-              <FeatureRow text="Upload useful PDFs" />
-              <FeatureRow text="Download verified notes" />
-              <FeatureRow text="Build your learning profile" />
-            </div>
-          </div>
-        </section>
-
-        <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[#0d0d0d] p-5 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-7 lg:p-8">
-          <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-red-500/10 blur-3xl" />
-
-          <div className="relative">
-            <div className="mb-7">
-              <div className="flex h-14 w-14 items-center justify-center rounded-[1.35rem] border border-red-500/20 bg-red-500/10 text-red-300">
-                <ShieldCheck size={26} />
+              <div className="mt-12 space-y-5">
+                {[
+                  "Build your personal learning profile",
+                  "Discover notes and study resources",
+                  "Connect with other students",
+                ].map((item) => (
+                  <div key={item} className="flex items-center gap-3 text-sm text-white/80">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-400">
+                      <CheckCircle2 size={16} />
+                    </span>
+                    {item}
+                  </div>
+                ))}
               </div>
-
-              <h2 className="mt-5 text-3xl font-black tracking-tight">
-                Create Account
-              </h2>
-
-              <p className="mt-2 text-sm leading-6 text-white/55">
-                Join NotesWallah and start sharing notes.
-              </p>
             </div>
 
-            {error && (
-              <div className="mb-5 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-300">
-                {error}
-              </div>
-            )}
+            <p className="relative z-10 text-xs text-white/35">
+              © {new Date().getFullYear()} Edukrate. All rights reserved.
+            </p>
+          </section>
 
-            <form onSubmit={handleSignup} className="space-y-5">
-              <InputField
-                id="name"
-                label="Full Name"
-                type="text"
-                autoComplete="name"
-                placeholder="Enter your full name"
-                value={name}
-                onChange={setName}
-                icon={<User size={18} />}
-              />
+          {/* Form panel */}
+          <section className="flex min-w-0 items-center justify-center px-5 py-8 sm:px-10 sm:py-12 lg:px-12 xl:px-16">
+            <div className="w-full max-w-[420px]">
 
-              <InputField
-                id="email"
-                label="Email"
-                type="email"
-                autoComplete="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={setEmail}
-                icon={<Mail size={18} />}
-              />
+              {/* Mobile logo */}
+              <Link href="/" className="mb-8 flex w-fit items-center gap-3 lg:hidden">
+                <div className="relative h-11 w-11 shrink-0">
+                  <Image
+                    src="/edukratelogo.png"
+                    alt="Edukrate logo"
+                    fill
+                    sizes="44px"
+                    className="object-contain"
+                    priority
+                  />
+                </div>
+                <span className="text-xl font-black tracking-tight">
+                  Edukrate
+                </span>
+              </Link>
 
-              <div>
-                <InputField
-                  id="password"
-                  label="Password"
-                  type="password"
-                  autoComplete="new-password"
-                  placeholder="Create a password"
-                  value={password}
-                  onChange={setPassword}
-                  icon={<Lock size={18} />}
-                />
-
-                <p className="mt-2 text-xs font-semibold text-white/35">
-                  Use at least 6 characters.
+              <div className="mb-8">
+                <div className="mb-3 text-xs font-extrabold uppercase tracking-[0.2em] text-red-500">
+                  Get started for free
+                </div>
+                <h2 className="text-3xl font-black tracking-tight sm:text-[38px]">
+                  Create account
+                </h2>
+                <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+                  Set up your account and join the Edukrate community.
                 </p>
               </div>
 
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn-primary w-full"
-              >
+              {error && (
+                <div
+                  role="alert"
+                  className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500"
+                >
+                  {error}
+                </div>
+              )}
 
-              <p className="text-center text-xs font-semibold text-white/35">
-                Free account • No payment required • Join thousands of students
+              <form onSubmit={handleSignup} className="space-y-5">
+                <div>
+                  <label htmlFor="signup-name" className="mb-2 block text-sm font-bold">
+                    Full name
+                  </label>
+                  <div className="relative">
+                    <User
+                      size={18}
+                      className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+                    />
+                    <input
+                      id="signup-name"
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Enter your full name"
+                      autoComplete="name"
+                      required
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--input-background)] py-3.5 pl-12 pr-4 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="signup-email" className="mb-2 block text-sm font-bold">
+                    Email address
+                  </label>
+                  <div className="relative">
+                    <Mail
+                      size={18}
+                      className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+                    />
+                    <input
+                      id="signup-email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                      required
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--input-background)] py-3.5 pl-12 pr-4 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="signup-password" className="mb-2 block text-sm font-bold">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <LockKeyhole
+                      size={18}
+                      className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+                    />
+                    <input
+                      id="signup-password"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Create a password"
+                      autoComplete="new-password"
+                      minLength={6}
+                      required
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--input-background)] py-3.5 pl-12 pr-12 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((value) => !value)}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--muted)] transition hover:text-[var(--foreground)]"
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs text-[var(--muted)]">
+                    Use at least 6 characters.
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-4 text-sm font-extrabold text-white shadow-lg shadow-red-600/20 transition hover:bg-red-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loading ? (
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  ) : (
+                    <>
+                      Create my account
+                      <ArrowRight size={18} />
+                    </>
+                  )}
+                </button>
+
+                <p className="text-center text-xs leading-5 text-[var(--muted)]">
+                  By creating an account, you agree to use Edukrate
+                  responsibly and respectfully.
+                </p>
+              </form>
+
+              <p className="mt-7 text-center text-sm text-[var(--muted)]">
+                Already have an account?{" "}
+                <Link
+                  href="/signin"
+                  className="font-extrabold text-red-500 transition hover:text-red-400"
+                >
+                  Sign in
+                </Link>
               </p>
 
-                {loading ? (
-                  <>
-                    <Loader2 size={18} className="animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    Sign Up
-                    <ArrowRight size={18} />
-                  </>
-                )}
-              </button>
-            </form>
-
-            <p className="mt-6 text-center text-sm text-white/55">
-              Already have an account?{" "}
-              <Link
-                href="/signin"
-                className="font-black text-red-300 transition hover:text-red-200"
-              >
-                Sign In
-              </Link>
-            </p>
-          </div>
-        </section>
+              <div className="mt-8 flex items-center justify-center gap-2 text-xs text-[var(--muted)]">
+                <ShieldCheck size={15} />
+                Secure registration powered by Firebase
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
     </main>
-  );
-}
-
-function InputField({
-  id,
-  label,
-  type,
-  autoComplete,
-  placeholder,
-  value,
-  onChange,
-  icon,
-}: {
-  id: string;
-  label: string;
-  type: string;
-  autoComplete: string;
-  placeholder: string;
-  value: string;
-  onChange: (value: string) => void;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label htmlFor={id} className="mb-2 block text-sm font-bold text-white/75">
-        {label}
-      </label>
-
-      <div className="relative">
-        <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/35">
-          {icon}
-        </div>
-
-        <input
-          id={id}
-          name={id}
-          type={type}
-          autoComplete={autoComplete}
-          placeholder={placeholder}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          className="w-full rounded-2xl border border-white/10 bg-black/30 px-5 py-4 pl-12 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-red-500"
-          required
-        />
-      </div>
-    </div>
-  );
-}
-
-function FeatureRow({ text }: { text: string }) {
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm font-bold text-white/65">
-      <CheckCircle2 size={17} className="text-green-400" />
-      {text}
-    </div>
   );
 }

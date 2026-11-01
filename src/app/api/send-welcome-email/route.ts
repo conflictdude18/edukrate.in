@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 
@@ -8,13 +9,16 @@ export async function POST(req: Request) {
     const { email, name } = await req.json();
 
     if (!email) {
-      return NextResponse.json({ error: "Email is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Email is required" },
+        { status: 400 }
+      );
     }
 
     await resend.emails.send({
-      from: "NotesWallah <legal@noteswallah.co.in>",
+      from: "Edukrate <legal@noteswallah.co.in>",
       to: email,
-      subject: "Welcome to NotesWallah 🚀",
+      subject: "Welcome to Edukrate 🚀",
       html: `
         <div
           style="
@@ -33,28 +37,27 @@ export async function POST(req: Request) {
               border:1px solid #e5e5e5;
             "
           >
+            <div
+              style="
+                background:#dc2626;
+                padding:32px;
+                text-align:center;
+                color:white;
+              "
+            >
+              <img
+                src="https://edukrate.in/edukratelogo.png"
+                alt="Edukrate"
+                width="80"
+                style="margin-bottom:16px;"
+              />
 
-          <div
-            style="
-              background:#dc2626;
-              padding:32px;
-              text-align:center;
-              color:white;
-            "
-          >
-            <img
-              src="https://www.noteswallah.co.in/logo.png"
-              alt="NotesWallah"
-              width="80"
-              style="margin-bottom:16px;"
-            />
-
-            <h1 style="margin:0;font-size:32px;">
-              NotesWallah
-            </h1>
+              <h1 style="margin:0;font-size:32px;">
+                Edukrate
+              </h1>
 
               <p style="margin-top:10px;font-size:16px;opacity:0.9;">
-                Smart Notes Sharing Platform
+                Learn. Organize. Grow.
               </p>
             </div>
 
@@ -64,7 +67,7 @@ export async function POST(req: Request) {
               </h2>
 
               <p style="font-size:16px;line-height:1.7;color:#444;">
-                Your NotesWallah account has been successfully created.
+                Your Edukrate account has been successfully created.
               </p>
 
               <p style="font-size:16px;line-height:1.7;color:#444;">
@@ -95,7 +98,7 @@ export async function POST(req: Request) {
 
               <div style="text-align:center;margin-top:35px;">
                 <a
-                  href="https://www.noteswallah.co.in"
+                  href="https://edukrate.in"
                   style="
                     display:inline-block;
                     background:#dc2626;
@@ -107,7 +110,7 @@ export async function POST(req: Request) {
                     font-size:15px;
                   "
                 >
-                  Open NotesWallah
+                  Open Edukrate
                 </a>
               </div>
 
@@ -119,9 +122,9 @@ export async function POST(req: Request) {
                   line-height:1.8;
                 "
               >
-                Thank you for being part of the NotesWallah community.
+                Thank you for being part of the Edukrate community.
                 <br />
-                Team NotesWallah
+                Team Edukrate
               </p>
             </div>
           </div>

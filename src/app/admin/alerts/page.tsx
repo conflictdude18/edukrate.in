@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -165,7 +166,7 @@ export default function AdminAlertsPage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55 sm:text-base">
-              Send important announcements to all NotesWallah users through
+              Send important announcements to all Edukrate users through
               their notification page.
             </p>
           </div>

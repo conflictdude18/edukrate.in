@@ -1,7 +1,8 @@
+
 "use client";
 
-import type React from "react";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -9,298 +10,310 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
 } from "firebase/auth";
+import { auth } from "@/firebase/firebase";
 import {
   ArrowRight,
-  CheckCircle2,
-  Loader2,
-  Lock,
+  Eye,
+  EyeOff,
+  LockKeyhole,
   Mail,
   ShieldCheck,
-  Sparkles,
+  GraduationCap,
 } from "lucide-react";
-
-import { auth } from "@/firebase/firebase";
 
 export default function SignInPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState("");
 
-  function getFirebaseErrorMessage(code: string) {
+  const getFirebaseErrorMessage = (code: string) => {
     switch (code) {
       case "auth/invalid-credential":
+      case "auth/wrong-password":
         return "Invalid email or password.";
       case "auth/user-not-found":
         return "Account not found.";
-      case "auth/wrong-password":
-        return "Incorrect password.";
       case "auth/too-many-requests":
         return "Too many attempts. Try again later.";
       case "auth/network-request-failed":
-        return "Network error. Check your internet.";
+        return "Network error. Check your internet connection.";
+      case "auth/invalid-email":
+        return "Please enter a valid email address.";
       default:
-        return "Something went wrong. Please try again.";
+        return "Unable to sign in. Please try again.";
     }
-  }
+  };
 
-  async function handleEmailLogin(e: React.FormEvent<HTMLFormElement>) {
+  const handleEmailLogin = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-
-    setLoading(true);
     setError("");
+    setLoading(true);
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, email.trim(), password);
       router.push("/dashboard");
-    } catch (err: unknown) {
-      if (
-        typeof err === "object" &&
-        err !== null &&
-        "code" in err &&
-        typeof err.code === "string"
-      ) {
-        setError(getFirebaseErrorMessage(err.code));
-      } else {
-        setError("Login failed.");
-      }
+    } catch (err: any) {
+      setError(getFirebaseErrorMessage(err?.code || ""));
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  async function handleGoogleLogin() {
-    setLoading(true);
+  const handleGoogleLogin = async () => {
     setError("");
+    setGoogleLoading(true);
 
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
       router.push("/dashboard");
-    } catch {
-      setError("Google sign in failed.");
+    } catch (err: any) {
+      setError(
+        err?.code
+          ? getFirebaseErrorMessage(err.code)
+          : "Google sign in failed."
+      );
     } finally {
-      setLoading(false);
+      setGoogleLoading(false);
     }
-  }
+  };
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#050505] px-4 py-4 text-white sm:px-6 sm:py-6 lg:px-8">
-      <div className="mx-auto grid max-w-6xl gap-5 py-4 md:py-6 lg:min-h-[82vh] lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
-        <section className="relative hidden overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-br from-white/10 via-white/[0.04] to-red-500/10 p-8 shadow-2xl shadow-black/30 lg:block">
-          <div className="absolute -right-10 -top-10 h-44 w-44 rounded-full bg-red-500/20 blur-3xl" />
+    <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1600px] items-center justify-center p-3 sm:p-6 lg:p-10">
+        <div className="grid min-h-[min(820px,calc(100vh-48px))] w-full max-w-[1240px] overflow-hidden rounded-[28px] border border-[var(--border)] bg-[var(--panel)] shadow-2xl shadow-black/10 lg:grid-cols-[1fr_0.95fr]">
 
-          <div className="relative flex h-full flex-col justify-between">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-black text-red-300">
-                <Sparkles size={16} />
-                NotesWallah Login
+          {/* Desktop branding panel */}
+          <section className="relative hidden overflow-hidden bg-[#160707] p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14">
+            <div className="pointer-events-none absolute -right-32 -top-32 h-[430px] w-[430px] rounded-full bg-red-600/20 blur-[100px]" />
+            <div className="pointer-events-none absolute -bottom-40 -left-24 h-[420px] w-[420px] rounded-full bg-red-900/30 blur-[100px]" />
+
+            <Link href="/" className="relative z-10 flex w-fit items-center gap-3">
+              <div className="relative h-12 w-12 shrink-0">
+                <Image
+                  src="/edukratelogo.png"
+                  alt="Edukrate logo"
+                  fill
+                  sizes="48px"
+                  className="object-contain"
+                  priority
+                />
+              </div>
+              <span className="text-2xl font-black tracking-tight">
+                Edukrate
+              </span>
+            </Link>
+
+            <div className="relative z-10 my-12 max-w-xl">
+              <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-red-400/25 bg-red-500/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-red-300">
+                <GraduationCap size={15} />
+                Your learning community
               </div>
 
-              <h1 className="mt-8 text-5xl font-black leading-tight tracking-tight">
-                Welcome back,
-                <span className="block text-red-500">student.</span>
+              <h1 className="text-5xl font-black leading-[1.12] tracking-tight xl:text-6xl">
+                Your learning.
+                <br />
+                Your resources.
+                <br />
+                <span className="text-red-500">Your community.</span>
               </h1>
 
-              <p className="mt-5 max-w-md text-sm leading-7 text-white/60">
-                Sign in to upload notes, save PDFs, follow creators and manage
-                your personal NotesWallah dashboard.
+              <p className="mt-7 max-w-md text-base leading-8 text-white/60">
+                Sign in to access your notes, discover useful study resources
+                and continue your learning journey with Edukrate.
               </p>
+
+              <div className="mt-12 space-y-5">
+                {[
+                  "Access your saved study materials",
+                  "Explore notes shared by students",
+                  "Stay connected with your learning community",
+                ].map((item) => (
+                  <div key={item} className="flex items-center gap-3 text-sm text-white/80">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-500/15 text-red-400">
+                      <ShieldCheck size={16} />
+                    </span>
+                    {item}
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="grid gap-3">
-              <FeatureRow text="Save important notes" />
-              <FeatureRow text="Track your uploads" />
-              <FeatureRow text="Join the student community" />
-            </div>
-          </div>
-        </section>
+            <p className="relative z-10 text-xs text-white/35">
+              © {new Date().getFullYear()} Edukrate. All rights reserved.
+            </p>
+          </section>
 
-        <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[#0d0d0d] p-5 shadow-2xl shadow-black/30 backdrop-blur-xl sm:p-7 lg:p-8">
-          <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-red-500/10 blur-3xl" />
+          {/* Form panel */}
+          <section className="flex min-w-0 items-center justify-center px-5 py-8 sm:px-10 sm:py-12 lg:px-12 xl:px-16">
+            <div className="w-full max-w-[420px]">
 
-          <div className="relative">
-            <div className="mb-7">
-              <div className="flex h-14 w-14 items-center justify-center rounded-[1.35rem] border border-red-500/20 bg-red-500/10 text-red-300">
-                <ShieldCheck size={26} />
+              {/* Mobile logo */}
+              <Link href="/" className="mb-10 flex w-fit items-center gap-3 lg:hidden">
+                <div className="relative h-11 w-11 shrink-0">
+                  <Image
+                    src="/edukratelogo.png"
+                    alt="Edukrate logo"
+                    fill
+                    sizes="44px"
+                    className="object-contain"
+                    priority
+                  />
+                </div>
+                <span className="text-xl font-black tracking-tight">
+                  Edukrate
+                </span>
+              </Link>
+
+              <div className="mb-8">
+                <div className="mb-3 text-xs font-extrabold uppercase tracking-[0.2em] text-red-500">
+                  Welcome back
+                </div>
+                <h2 className="text-3xl font-black tracking-tight sm:text-[38px]">
+                  Sign in
+                </h2>
+                <p className="mt-3 text-sm leading-6 text-[var(--muted)]">
+                  Enter your account details to continue.
+                </p>
               </div>
 
-              <h2 className="mt-5 text-3xl font-black tracking-tight">
-                Sign In
-              </h2>
-
-              <p className="mt-2 text-sm leading-6 text-white/55">
-                Access your NotesWallah account securely.
-              </p>
-            </div>
-
-            {error && (
-              <div className="mb-5 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-300">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="button"
-              onClick={handleGoogleLogin}
-              disabled={loading}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-5 py-4 text-sm font-black text-white transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {loading ? (
-                <Loader2 size={18} className="animate-spin" />
-              ) : (
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 48 48"
-                  className="h-[18px] w-[18px]"
+              {error && (
+                <div
+                  role="alert"
+                  className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-500"
                 >
-                  <path
-                    fill="#FFC107"
-                    d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.7 1.1 7.8 3l5.7-5.7C34.1 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.3-.4-3.5z"
-                  />
-                  <path
-                    fill="#FF3D00"
-                    d="M6.3 14.7l6.6 4.8C14.7 16 19 12 24 12c3 0 5.7 1.1 7.8 3l5.7-5.7C34.1 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"
-                  />
-                  <path
-                    fill="#4CAF50"
-                    d="M24 44c5.2 0 10-2 13.5-5.3l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.5 16.2 44 24 44z"
-                  />
-                  <path
-                    fill="#1976D2"
-                    d="M43.6 20.5H42V20H24v8h11.3c-1.1 3.1-3.3 5.5-6.2 7.1l6.2 5.2C39.5 36.5 44 30.7 44 24c0-1.3-.1-2.3-.4-3.5z"
-                  />
-                </svg>
+                  {error}
+                </div>
               )}
-              Continue with Google
-            </button>
-
-            <div className="my-6 flex items-center gap-3">
-              <div className="h-px flex-1 bg-white/10" />
-              <span className="text-xs font-black text-white/35">OR</span>
-              <div className="h-px flex-1 bg-white/10" />
-            </div>
-
-            <form onSubmit={handleEmailLogin} className="space-y-5">
-              <InputField
-                id="email"
-                label="Email"
-                type="email"
-                autoComplete="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={setEmail}
-                icon={<Mail size={18} />}
-              />
-
-              <InputField
-                id="password"
-                label="Password"
-                type="password"
-                autoComplete="current-password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={setPassword}
-                icon={<Lock size={18} />}
-              />
-
-              <div className="flex justify-end">
-                <Link
-                  href="/forgot-password"
-                  className="text-sm font-semibold text-red-300 transition hover:text-red-200"
-                >
-                  Forgot Password?
-                </Link>
-              </div>
 
               <button
-                type="submit"
-                disabled={loading}
-                className="btn-primary w-full"
+                type="button"
+                onClick={handleGoogleLogin}
+                disabled={loading || googleLoading}
+                className="flex w-full items-center justify-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-3.5 text-sm font-bold transition hover:bg-[var(--surface-hover)] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {loading ? (
-                  <>
-                    <Loader2 size={18} className="animate-spin" />
-                    Signing In...
-                  </>
+                {googleLoading ? (
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
                 ) : (
-                  <>
-                    Sign In
-                    <ArrowRight size={18} />
-                  </>
+                  <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
+                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.73 7.18l7.25 5.62c4.23-3.91 7.52-9.68 7.52-17.27z" />
+                    <path fill="#FBBC05" d="M10.53 28.59A14.4 14.4 0 0 1 9.75 24c0-1.59.27-3.13.75-4.59l-7.98-6.19A23.9 23.9 0 0 0 0 24c0 3.88.93 7.55 2.56 10.78l7.97-6.19z" />
+                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.91-5.81l-7.25-5.62c-2.01 1.35-4.58 2.15-8.66 2.15-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 43.62 14.62 48 24 48z" />
+                  </svg>
                 )}
+                Continue with Google
               </button>
-            </form>
 
-            <p className="mt-6 text-center text-sm text-white/55">
-              Don&apos;t have an account?{" "}
-              <Link
-                href="/signup"
-                className="font-black text-red-300 transition hover:text-red-200"
-              >
-                Sign Up
-              </Link>
-            </p>
-          </div>
-        </section>
+              <div className="my-7 flex items-center gap-4">
+                <div className="h-px flex-1 bg-[var(--border)]" />
+                <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--muted)]">
+                  Or with email
+                </span>
+                <div className="h-px flex-1 bg-[var(--border)]" />
+              </div>
+
+              <form onSubmit={handleEmailLogin} className="space-y-5">
+                <div>
+                  <label htmlFor="signin-email" className="mb-2 block text-sm font-bold">
+                    Email address
+                  </label>
+                  <div className="relative">
+                    <Mail
+                      size={18}
+                      className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+                    />
+                    <input
+                      id="signin-email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                      required
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--input-background)] py-3.5 pl-12 pr-4 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <label htmlFor="signin-password" className="text-sm font-bold">
+                      Password
+                    </label>
+                    <Link
+                      href="/forgot-password"
+                      className="text-xs font-bold text-red-500 transition hover:text-red-400"
+                    >
+                      Forgot password?
+                    </Link>
+                  </div>
+
+                  <div className="relative">
+                    <LockKeyhole
+                      size={18}
+                      className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+                    />
+                    <input
+                      id="signin-password"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Enter your password"
+                      autoComplete="current-password"
+                      required
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--input-background)] py-3.5 pl-12 pr-12 text-sm text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-red-500 focus:ring-4 focus:ring-red-500/10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((value) => !value)}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--muted)] transition hover:text-[var(--foreground)]"
+                    >
+                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || googleLoading}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-4 text-sm font-extrabold text-white shadow-lg shadow-red-600/20 transition hover:bg-red-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {loading ? (
+                    <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  ) : (
+                    <>
+                      Sign in to Edukrate
+                      <ArrowRight size={18} />
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <p className="mt-8 text-center text-sm text-[var(--muted)]">
+                Don't have an account?{" "}
+                <Link
+                  href="/signup"
+                  className="font-extrabold text-red-500 transition hover:text-red-400"
+                >
+                  Create account
+                </Link>
+              </p>
+
+              <div className="mt-8 flex items-center justify-center gap-2 text-xs text-[var(--muted)]">
+                <ShieldCheck size={15} />
+                Secure sign-in powered by Firebase
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
     </main>
-  );
-}
-
-function InputField({
-  id,
-  label,
-  type,
-  autoComplete,
-  placeholder,
-  value,
-  onChange,
-  icon,
-}: {
-  id: string;
-  label: string;
-  type: string;
-  autoComplete: string;
-  placeholder: string;
-  value: string;
-  onChange: (value: string) => void;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label htmlFor={id} className="mb-2 block text-sm font-bold text-white/75">
-        {label}
-      </label>
-
-      <div className="relative">
-        <div className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/35">
-          {icon}
-        </div>
-
-        <input
-          id={id}
-          type={type}
-          autoComplete={autoComplete}
-          placeholder={placeholder}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          className="w-full rounded-2xl border border-white/10 bg-black/30 px-5 py-4 pl-12 text-sm text-white outline-none transition placeholder:text-white/30 focus:border-red-500"
-          required
-        />
-      </div>
-    </div>
-  );
-}
-
-function FeatureRow({ text }: { text: string }) {
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm font-bold text-white/65">
-      <CheckCircle2 size={17} className="text-green-400" />
-      {text}
-    </div>
   );
 }

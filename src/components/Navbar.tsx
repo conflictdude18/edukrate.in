@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -30,25 +31,39 @@ export default function Navbar() {
 
   async function handleLogout() {
     await signOut(auth);
+    setOpen(false);
     window.location.href = "/";
   }
 
   useEffect(() => {
+    let active = true;
+
     async function checkRole() {
       if (!user) {
         setIsAdmin(false);
         return;
       }
 
-      const snap = await getDoc(doc(db, "users", user.uid));
+      try {
+        const snap = await getDoc(doc(db, "users", user.uid));
 
-      if (snap.exists()) {
-        const data = snap.data() as UserDoc;
-        setIsAdmin(data.role === "admin");
+        if (active) {
+          setIsAdmin(
+            snap.exists() &&
+              (snap.data() as UserDoc).role === "admin"
+          );
+        }
+      } catch (error) {
+        console.error("ADMIN ROLE CHECK ERROR:", error);
+        if (active) setIsAdmin(false);
       }
     }
 
     checkRole();
+
+    return () => {
+      active = false;
+    };
   }, [user]);
 
   useEffect(() => {
@@ -65,22 +80,18 @@ export default function Navbar() {
 
     const unsubscribe = onSnapshot(
       unreadQuery,
-      (snap) => {
-        setUnreadCount(snap.size);
-      },
-      (error) => {
-        console.error("REALTIME NOTIFICATIONS ERROR:", error);
-      }
+      (snap) => setUnreadCount(snap.size),
+      (error) => console.error("REALTIME NOTIFICATIONS ERROR:", error)
     );
 
     return () => unsubscribe();
   }, [user]);
 
   useEffect(() => {
-    document.body.style.overflow = open ? "hidden" : "auto";
+    document.body.style.overflow = open ? "hidden" : "";
 
     return () => {
-      document.body.style.overflow = "auto";
+      document.body.style.overflow = "";
     };
   }, [open]);
 
@@ -88,28 +99,29 @@ export default function Navbar() {
     <>
       <header className="sticky top-0 z-50 border-b border-white/10 bg-[#050505]/90 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-          <Link href="/" className="flex min-w-0 items-center gap-3">
-            <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5">
-              <Image
-                src="/icon.png"
-                alt="NotesWallah Logo"
-                fill
-                sizes="40px"
-                className="object-cover"
-              />
-            </div>
 
-            <div className="min-w-0">
-              <h1 className="truncate text-lg font-black text-white">
-                Notes<span className="text-red-500">Wallah</span>
-              </h1>
+          {/* BRAND */}
+          <Link href="/" className="flex shrink-0 items-center">
+            <Image
+              src="/edukratelogowithname.png"
+              alt="Edukrate"
+              width={190}
+              height={58}
+              priority
+              className="hidden h-11 w-auto object-contain sm:block"
+            />
 
-              <p className="truncate text-[10px] text-white/40">
-                Smart Notes Platform
-              </p>
-            </div>
+            <Image
+              src="/edukratelogo.png"
+              alt="Edukrate"
+              width={48}
+              height={48}
+              priority
+              className="h-10 w-10 object-contain sm:hidden"
+            />
           </Link>
 
+          {/* DESKTOP NAVIGATION */}
           <nav className="hidden items-center gap-5 text-sm font-semibold text-white/65 lg:flex">
             <DesktopLink href="/browse" label="Browse" />
             <DesktopLink href="/following" label="Following" />
@@ -136,6 +148,7 @@ export default function Navbar() {
             )}
           </nav>
 
+          {/* DESKTOP ACTIONS */}
           <div className="hidden items-center gap-3 lg:flex">
             {!loading && !user && (
               <>
@@ -181,8 +194,10 @@ export default function Navbar() {
             )}
           </div>
 
+          {/* MOBILE MENU BUTTON */}
           <button
             aria-label="Open Menu"
+            aria-expanded={open}
             onClick={() => setOpen(true)}
             className="relative rounded-xl border border-white/10 bg-white/5 p-2 text-white lg:hidden"
           >
@@ -195,7 +210,9 @@ export default function Navbar() {
         </div>
       </header>
 
+      {/* MOBILE OVERLAY */}
       <div
+        aria-hidden="true"
         onClick={() => setOpen(false)}
         className={`fixed inset-0 z-40 bg-black/70 backdrop-blur-sm transition-opacity duration-300 lg:hidden ${
           open
@@ -204,33 +221,21 @@ export default function Navbar() {
         }`}
       />
 
+      {/* MOBILE SIDEBAR */}
       <aside
+        aria-label="Mobile navigation"
         className={`fixed left-0 top-0 z-50 h-dvh w-[86vw] max-w-[340px] overflow-y-auto border-r border-white/10 bg-[#0b0b0d] shadow-2xl shadow-black/40 transition-transform duration-300 ease-in-out lg:hidden ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="flex items-center justify-between border-b border-white/10 p-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-white/10">
-              <Image
-                src="/icon.png"
-                alt="NotesWallah Logo"
-                fill
-                sizes="40px"
-                className="object-cover"
-              />
-            </div>
-
-            <div className="min-w-0">
-              <h2 className="truncate font-black text-white">
-                Notes<span className="text-red-500">Wallah</span>
-              </h2>
-
-              <p className="truncate text-xs text-white/40">
-                Student Community
-              </p>
-            </div>
-          </div>
+          <Image
+            src="/edukratelogowithname.png"
+            alt="Edukrate"
+            width={175}
+            height={54}
+            className="h-10 w-auto object-contain"
+          />
 
           <button
             aria-label="Close Menu"
