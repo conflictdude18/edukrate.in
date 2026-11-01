@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import {
   applicationDefault,
@@ -69,7 +70,10 @@ async function validateUrl(raw: string) {
 
   const addresses = await lookup(hostname, { all: true });
 
-  if (!addresses.length || addresses.some(({ address }) => !isPublicIp(address))) {
+  if (
+    !addresses.length ||
+    addresses.some(({ address }) => !isPublicIp(address))
+  ) {
     throw new Error("URL does not resolve to a public address.");
   }
 
@@ -92,7 +96,9 @@ async function fetchPdf(url: string) {
     throw new Error(`PDF returned status ${response.status}.`);
   }
 
-  const contentType = (response.headers.get("content-type") || "").toLowerCase();
+  const contentType = (
+    response.headers.get("content-type") || ""
+  ).toLowerCase();
 
   if (
     !contentType.includes("application/pdf") &&
@@ -101,13 +107,17 @@ async function fetchPdf(url: string) {
     throw new Error("Search result is not a PDF.");
   }
 
-  const declaredSize = Number(response.headers.get("content-length") || "0");
+  const declaredSize = Number(
+    response.headers.get("content-length") || "0"
+  );
 
   if (declaredSize > MAX_PDF_SIZE) {
     throw new Error("PDF exceeds the size limit.");
   }
 
-  if (!response.body) throw new Error("PDF has no readable body.");
+  if (!response.body) {
+    throw new Error("PDF has no readable body.");
+  }
 
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -116,6 +126,7 @@ async function fetchPdf(url: string) {
   try {
     while (true) {
       const { done, value } = await reader.read();
+
       if (done) break;
       if (!value) continue;
 
@@ -145,7 +156,7 @@ function cleanText(text: string) {
   return text
     .replace(/\u00a0/g, " ")
     .replace(/[ \t]+/g, " ")
-    .replace(/\n\s*\n+/g, "\n\n")
+    .replace(/\n\s\*\n+/g, "\n\n")
     .trim();
 }
 
@@ -154,10 +165,14 @@ async function extractPdfText(buffer: Buffer) {
     mergePages: true,
   });
 
-  const text = cleanText(String(result.text ?? "")).slice(0, MAX_TEXT_SIZE);
+  const text = cleanText(
+    String(result.text ?? "")
+  ).slice(0, MAX_TEXT_SIZE);
 
   if (text.length < 300) {
-    throw new Error("PDF has too little selectable text; it may be scanned.");
+    throw new Error(
+      "PDF has too little selectable text; it may be scanned."
+    );
   }
 
   return text;
@@ -167,12 +182,22 @@ function titleFromUrl(rawUrl: string) {
   const url = new URL(rawUrl);
   const filename = url.pathname.split("/").pop() || "Study Notes";
 
-  return decodeURIComponent(filename)
-    .replace(/\.pdf$/i, "")
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 250) || "Study Notes";
+  let decodedFilename = filename;
+
+  try {
+    decodedFilename = decodeURIComponent(filename);
+  } catch {
+    // Keep the original filename if URL decoding fails.
+  }
+
+  return (
+    decodedFilename
+      .replace(/\.pdf$/i, "")
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 250) || "Study Notes"
+  );
 }
 
 async function searchWeb(query: string) {
@@ -199,7 +224,9 @@ async function searchWeb(query: string) {
   });
 
   if (!response.ok) {
-    throw new Error(`Tavily Search returned status ${response.status}.`);
+    throw new Error(
+      `Tavily Search returned status ${response.status}.`
+    );
   }
 
   const data = await response.json();
@@ -208,21 +235,26 @@ async function searchWeb(query: string) {
     .map((result: { url?: string }) => result.url)
     .filter(
       (url: unknown): url is string =>
-        typeof url === "string" && /\.pdf(?:$|[?#])/i.test(url)
+        typeof url === "string" &&
+        /\.pdf(?:$|[?#])/i.test(url)
     );
 }
 
 async function uploadPdf(buffer: Buffer, title: string) {
   const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
-  const bucket = bucketName ? storage.bucket(bucketName) : storage.bucket();
+  const bucket = bucketName
+    ? storage.bucket(bucketName)
+    : storage.bucket();
 
   if (!bucket.name) {
     throw new Error("FIREBASE_STORAGE_BUCKET is not configured.");
   }
 
   const safeName =
-    title.replace(/[^\w\s.-]/g, "").replace(/\s+/g, "-").slice(0, 100) ||
-    "study-notes";
+    title
+      .replace(/[^\w\s.-]/g, "")
+      .replace(/\s+/g, "-")
+      .slice(0, 100) || "study-notes";
 
   const filePath = `notes/imported/${Date.now()}-${randomUUID()}-${safeName}.pdf`;
   const token = randomUUID();
@@ -232,7 +264,9 @@ async function uploadPdf(buffer: Buffer, title: string) {
     contentType: "application/pdf",
     metadata: {
       contentType: "application/pdf",
-      metadata: { firebaseStorageDownloadTokens: token },
+      metadata: {
+        firebaseStorageDownloadTokens: token,
+      },
     },
   });
 
@@ -247,23 +281,118 @@ async function uploadPdf(buffer: Buffer, title: string) {
 }
 
 const SEARCH_QUERIES = [
-  'Class 12 study notes PDF NCERT',
-  'Class 12 revision notes PDF physics chemistry mathematics',
-  'Class 11 study notes PDF NCERT',
-  'Class 12 biology chapter notes PDF',
+  "Class 12 study notes PDF NCERT",
+  "Class 12 revision notes PDF physics chemistry mathematics",
+  "Class 11 study notes PDF NCERT",
+  "Class 12 biology chapter notes PDF",
 ];
 
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
   const authorization = request.headers.get("authorization");
 
-  console.log("Cron auth diagnostic:", {
-    secretConfigured: Boolean(secret),
-    authorizationReceived: Boolean(authorization),
-    authorizationStartsWithBearer: authorization?.startsWith("Bearer ") ?? false,
-  });
-
   if (!secret || authorization !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    return NextResponse.json(
+      { error: "Unauthorized." },
+      { status: 401 }
+    );
+  }
+
+  const imported: string[] = [];
+  const skipped: string[] = [];
+  const errors: string[] = [];
+
+  try {
+    const foundUrls = new Set<string>();
+
+    for (const query of SEARCH_QUERIES) {
+      const urls = await searchWeb(query);
+
+      urls.forEach((url: string) => foundUrls.add(url));
+    }
+
+    for (const sourceUrl of foundUrls) {
+      if (imported.length >= MAX_IMPORTS_PER_RUN) break;
+
+      try {
+        const existing = await db
+          .collection("notes")
+          .where("sourceUrl", "==", sourceUrl)
+          .limit(1)
+          .get();
+
+        if (!existing.empty) {
+          skipped.push(sourceUrl);
+          continue;
+        }
+
+        const buffer = await fetchPdf(sourceUrl);
+        const description = await extractPdfText(buffer);
+        const title = titleFromUrl(sourceUrl);
+        const storageData = await uploadPdf(buffer, title);
+
+        const note = {
+          title,
+          description,
+          class: "",
+          subject: "",
+          board: "",
+          topic: "",
+          tags: [],
+          keywords: [],
+          type: "Imported",
+          pdfURL: storageData.pdfURL,
+          filePath: storageData.filePath,
+          fileName: `${title}.pdf`,
+          fileSize: storageData.fileSize,
+          thumbnailUrl: "",
+          uploaderId: "edukrate-auto-import",
+          uploaderName: "Edukrate Auto Import",
+          uploaderEmail: "",
+          uploadDate: FieldValue.serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+          downloadsCount: 0,
+          status: "pending",
+          sourceUrl,
+          importSource: "web-search",
+        };
+
+        await db.collection("notes").add(note);
+        imported.push(title);
+      } catch (error) {
+        errors.push(
+          `${sourceUrl}: ${
+            error instanceof Error
+              ? error.message
+              : "Import failed"
+          }`
+        );
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      discovered: foundUrls.size,
+      imported: imported.length,
+      importedTitles: imported,
+      skipped: skipped.length,
+      errors,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Cron import failed.";
+
+    console.error("Scheduled notes import failed:", message, error);
+
+    return NextResponse.json(
+      {
+        error: message,
+        imported: imported.length,
+      },
+      { status: 500 }
+    );
   }
 }
