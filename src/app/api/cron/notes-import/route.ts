@@ -257,97 +257,13 @@ export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
   const authorization = request.headers.get("authorization");
 
+  console.log("Cron auth diagnostic:", {
+    secretConfigured: Boolean(secret),
+    authorizationReceived: Boolean(authorization),
+    authorizationStartsWithBearer: authorization?.startsWith("Bearer ") ?? false,
+  });
+
   if (!secret || authorization !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
-  const imported: string[] = [];
-  const skipped: string[] = [];
-  const errors: string[] = [];
-
-  try {
-    const foundUrls = new Set<string>();
-
-    for (const query of SEARCH_QUERIES) {
-      const urls = await searchWeb(query);
-      urls.forEach((url: string) => foundUrls.add(url));
-    }
-
-    for (const sourceUrl of foundUrls) {
-      if (imported.length >= MAX_IMPORTS_PER_RUN) break;
-
-      try {
-        const existing = await db
-          .collection("notes")
-          .where("sourceUrl", "==", sourceUrl)
-          .limit(1)
-          .get();
-
-        if (!existing.empty) {
-          skipped.push(sourceUrl);
-          continue;
-        }
-
-        const buffer = await fetchPdf(sourceUrl);
-        const description = await extractPdfText(buffer);
-        const title = titleFromUrl(sourceUrl);
-        const storageData = await uploadPdf(buffer, title);
-
-        const note = {
-          title,
-          description,
-          class: "",
-          subject: "",
-          board: "",
-          topic: "",
-          tags: [],
-          keywords: [],
-          type: "Imported",
-          pdfURL: storageData.pdfURL,
-          filePath: storageData.filePath,
-          fileName: `${title}.pdf`,
-          fileSize: storageData.fileSize,
-          thumbnailUrl: "",
-          uploaderId: "edukrate-auto-import",
-          uploaderName: "Edukrate Auto Import",
-          uploaderEmail: "",
-          uploadDate: FieldValue.serverTimestamp(),
-          createdAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-          downloadsCount: 0,
-          status: "pending",
-          sourceUrl,
-          importSource: "web-search",
-        };
-
-        await db.collection("notes").add(note);
-        imported.push(title);
-      } catch (error) {
-        errors.push(
-          `${sourceUrl}: ${
-            error instanceof Error ? error.message : "Import failed"
-          }`
-        );
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      discovered: foundUrls.size,
-      imported: imported.length,
-      importedTitles: imported,
-      skipped: skipped.length,
-      errors,
-    });
-  } catch (error) {
-    console.error("Scheduled notes import failed:", error);
-
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Cron import failed.",
-        imported: imported.length,
-      },
-      { status: 500 }
-    );
   }
 }
