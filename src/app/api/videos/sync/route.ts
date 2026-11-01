@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { getLatestChannelVideos } from "@/lib/youtube";
-import { isStudyVideo } from "@/lib/video-classifier";
+import { classifyVideo } from "@/lib/video-classifier";
 
 export async function GET() {
   try {
@@ -63,18 +63,14 @@ export async function GET() {
 
         if (!youtubeId) continue;
 
-        const title =
-          video.snippet?.title?.toLowerCase() || "";
-
-        const isStudy =
-          await isStudyVideo(
-            video.snippet?.title || "",
-            video.snippet?.description || ""
-          );
+        const isStudy = classifyVideo(
+          video.snippet?.title || "",
+          video.snippet?.description || ""
+        );
 
         if (!isStudy) {
           console.log(
-            "REJECTED BY GEMINI:",
+            "REJECTED BY CLASSIFIER:",
             video.snippet?.title
           );
 
@@ -82,7 +78,7 @@ export async function GET() {
         }
 
         console.log(
-          "ACCEPTED BY GEMINI:",
+          "ACCEPTED BY CLASSIFIER:",
           video.snippet?.title
         );
 
