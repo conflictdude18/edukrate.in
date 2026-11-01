@@ -270,7 +270,7 @@ export async function GET(request: NextRequest) {
 
     for (const query of SEARCH_QUERIES) {
       const urls = await searchWeb(query);
-      urls.forEach((url) => foundUrls.add(url));
+      urls.forEach((url: string) => foundUrls.add(url));
     }
 
     for (const sourceUrl of foundUrls) {
