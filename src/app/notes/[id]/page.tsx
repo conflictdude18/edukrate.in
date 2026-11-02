@@ -1,4 +1,3 @@
-
 "use client";
 
 import AISummaryCard from "@/components/AISummaryCard";
@@ -30,7 +29,9 @@ import {
   Heart,
   Loader2,
   MessageCircle,
+  Pencil,
   RefreshCw,
+  Save,
   Trash2,
   X,
 } from "lucide-react";
@@ -47,6 +48,18 @@ type Comment = {
   userAvatar?: string;
   text: string;
   createdAt: string;
+};
+
+type NoteEditValues = {
+  title: string;
+  description: string;
+  class: string;
+  subject: string;
+  topic: string;
+  board: string;
+  type: string;
+  tags: string[];
+  keywords: string[];
 };
 
 const cardClass =
@@ -81,7 +94,26 @@ export default function NoteDetailsPage() {
   const [reportDetails, setReportDetails] = useState("");
   const [reporting, setReporting] = useState(false);
 
+  const [editOpen, setEditOpen] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editValues, setEditValues] = useState<NoteEditValues>({
+    title: "",
+    description: "",
+    class: "",
+    subject: "",
+    topic: "",
+    board: "",
+    type: "",
+    tags: [],
+    keywords: [],
+  });
+
   const trackedViewId = useRef<string | null>(null);
+
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  const isUploader = Boolean(user && note && user.uid === note.uploaderId);
+  const canEditNote = isUploader || isAdmin;
 
   const fetchComments = useCallback(async () => {
     if (!id) return;
@@ -111,36 +143,36 @@ export default function NoteDetailsPage() {
     }
   }, [id]);
 
-  useEffect(() => {
-    async function fetchNote() {
-      if (!id) return;
+  const fetchNote = useCallback(async () => {
+    if (!id) return;
 
-      setLoading(true);
-      setNote(null);
+    setLoading(true);
+    setNote(null);
 
-      try {
-        const snap = await getDoc(doc(db, "notes", id));
+    try {
+      const snap = await getDoc(doc(db, "notes", id));
 
-        if (!snap.exists()) {
-          setNote(null);
-          return;
-        }
-
-        setNote({
-          id: snap.id,
-          ...(snap.data() as Omit<Note, "id">),
-        });
-      } catch (err) {
-        console.error("NOTE FETCH ERROR:", err);
-        toast.error("Could not load this note.");
-      } finally {
-        setLoading(false);
+      if (!snap.exists()) {
+        setNote(null);
+        return;
       }
-    }
 
+      setNote({
+        id: snap.id,
+        ...(snap.data() as Omit<Note, "id">),
+      });
+    } catch (err) {
+      console.error("NOTE FETCH ERROR:", err);
+      toast.error("Could not load this note.");
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
     fetchNote();
     fetchComments();
-  }, [id, fetchComments]);
+  }, [fetchNote, fetchComments]);
 
   useEffect(() => {
     async function increaseViews() {
@@ -165,6 +197,7 @@ export default function NoteDetailsPage() {
       if (!user || !id) {
         setLikeId(null);
         setBookmarkId(null);
+        setLikesCount(0);
         return;
       }
 
@@ -203,6 +236,121 @@ export default function NoteDetailsPage() {
 
     fetchUserActions();
   }, [user, id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkAdminRole() {
+      if (!user) {
+        setIsAdmin(false);
+        return;
+      }
+
+      try {
+        const userSnapshot = await getDoc(doc(db, "users", user.uid));
+
+        if (!cancelled) {
+          setIsAdmin(
+            userSnapshot.exists() &&
+              userSnapshot.data().role === "admin"
+          );
+        }
+      } catch (error) {
+        console.error("ADMIN ROLE CHECK ERROR:", error);
+
+        if (!cancelled) {
+          setIsAdmin(false);
+        }
+      }
+    }
+
+    checkAdminRole();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  function openEditModal() {
+    if (!note || !canEditNote) {
+      toast.error("Only the uploader can edit this note.");
+      return;
+    }
+
+    setEditValues({
+      title: note.title || "",
+      description: note.description || "",
+      class: note.class || "",
+      subject: note.subject || "",
+      topic: note.topic || "",
+      board: note.board || "",
+      type: note.type || "",
+      tags: note.tags || [],
+      keywords: note.keywords || [],
+    });
+
+    setEditOpen(true);
+  }
+
+  async function handleSaveEdit() {
+    if (!note?.id || !user) {
+      toast.error("You must be signed in to edit this note.");
+      return;
+    }
+
+    if (!canEditNote) {
+      toast.error("You do not have permission to edit this note.");
+      return;
+    }
+
+    const title = editValues.title.trim();
+
+    if (!title) {
+      toast.error("Please enter a note title.");
+      return;
+    }
+
+    if (!editValues.subject.trim()) {
+      toast.error("Please enter a subject.");
+      return;
+    }
+
+    try {
+      setSavingEdit(true);
+
+      const updatedValues = {
+        title,
+        description: editValues.description.trim(),
+        class: editValues.class.trim(),
+        subject: editValues.subject.trim(),
+        topic: editValues.topic.trim(),
+        board: editValues.board.trim(),
+        type: editValues.type.trim(),
+        tags: editValues.tags,
+        keywords: editValues.keywords,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await updateDoc(doc(db, "notes", note.id), updatedValues);
+
+      setNote((current) =>
+        current
+          ? {
+              ...current,
+              ...updatedValues,
+            }
+          : current
+      );
+
+      setEditOpen(false);
+      toast.success("Note updated successfully.");
+    } catch (err) {
+      console.error("NOTE EDIT ERROR:", err);
+      toast.error("Could not update note. Check your Firestore rules.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   async function handleCommentSubmit() {
     if (!user) {
@@ -665,6 +813,16 @@ export default function NoteDetailsPage() {
                   <CheckCircle2 size={13} />
                   Approved Material
                 </span>
+
+                {canEditNote && (
+                  <button
+                    onClick={openEditModal}
+                    className="ml-auto inline-flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-500 transition hover:bg-red-500/15"
+                  >
+                    <Pencil size={14} />
+                    Edit note
+                  </button>
+                )}
               </div>
 
               <h1 className="mt-4 break-words text-2xl font-black leading-tight sm:text-3xl">
@@ -682,18 +840,9 @@ export default function NoteDetailsPage() {
               </div>
 
               <div className="mt-5 grid grid-cols-2 gap-3">
-                <InfoBox
-                  label="Subject"
-                  value={note.subject || "N/A"}
-                />
-                <InfoBox
-                  label="Class"
-                  value={note.class || "N/A"}
-                />
-                <InfoBox
-                  label="Topic"
-                  value={note.topic || "N/A"}
-                />
+                <InfoBox label="Subject" value={note.subject || "N/A"} />
+                <InfoBox label="Class" value={note.class || "N/A"} />
+                <InfoBox label="Topic" value={note.topic || "N/A"} />
                 <InfoBox
                   label="Downloads"
                   value={String(note.downloadsCount ?? 0)}
@@ -701,19 +850,15 @@ export default function NoteDetailsPage() {
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-3">
-                <InfoBox
-                  label="Likes"
-                  value={String(likesCount)}
-                />
-                <InfoBox
-                  label="Views"
-                  value={String(note.views ?? 0)}
-                />
+                <InfoBox label="Likes" value={String(likesCount)} />
+                <InfoBox label="Views" value={String(note.views ?? 0)} />
               </div>
 
               {note.tags?.length > 0 && (
                 <div className="mt-5">
-                  <p className={`mb-3 text-xs font-bold uppercase tracking-wider ${mutedText}`}>
+                  <p
+                    className={`mb-3 text-xs font-bold uppercase tracking-wider ${mutedText}`}
+                  >
                     Topics and Tags
                   </p>
 
@@ -791,15 +936,14 @@ export default function NoteDetailsPage() {
 
             {/* UPLOADER */}
             <section className={`${cardClass} p-5 sm:p-6`}>
-              <p className={`text-xs font-bold uppercase tracking-wider ${mutedText}`}>
+              <p
+                className={`text-xs font-bold uppercase tracking-wider ${mutedText}`}
+              >
                 Uploaded By
               </p>
 
               <div className="mt-4 flex items-center gap-3">
-                <UserAvatar
-                  name={note.uploaderName || "User"}
-                  size="md"
-                />
+                <UserAvatar name={note.uploaderName || "User"} size="md" />
 
                 <div className="min-w-0">
                   <h3 className="truncate text-sm font-bold">
@@ -886,6 +1030,173 @@ export default function NoteDetailsPage() {
           </button>
         </div>
       </div>
+
+      {/* EDIT NOTE MODAL */}
+      {editOpen && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/65 p-3 backdrop-blur-sm sm:p-5"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !savingEdit) {
+              setEditOpen(false);
+            }
+          }}
+        >
+          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 text-[var(--foreground)] shadow-2xl sm:p-7">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 text-red-500">
+                  <Pencil size={18} />
+                  <p className="text-xs font-black uppercase tracking-wider">
+                    Note editor
+                  </p>
+                </div>
+
+                <h2 className="mt-2 text-2xl font-black">
+                  Edit your note
+                </h2>
+
+                <p className={`mt-1 text-sm ${mutedText}`}>
+                  Update the information shown on your published note.
+                </p>
+              </div>
+
+              <button
+                onClick={() => setEditOpen(false)}
+                disabled={savingEdit}
+                className="rounded-xl border border-[var(--border)] bg-[var(--card-soft)] p-2 text-[var(--muted)] transition hover:text-[var(--foreground)] disabled:opacity-50"
+                aria-label="Close editor"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <EditField
+                label="Title"
+                value={editValues.title}
+                onChange={(value) =>
+                  setEditValues((prev) => ({ ...prev, title: value }))
+                }
+                required
+              />
+
+              <EditField
+                label="Class"
+                value={editValues.class}
+                onChange={(value) =>
+                  setEditValues((prev) => ({ ...prev, class: value }))
+                }
+              />
+
+              <EditField
+                label="Subject"
+                value={editValues.subject}
+                onChange={(value) =>
+                  setEditValues((prev) => ({ ...prev, subject: value }))
+                }
+                required
+              />
+
+              <EditField
+                label="Topic"
+                value={editValues.topic}
+                onChange={(value) =>
+                  setEditValues((prev) => ({ ...prev, topic: value }))
+                }
+              />
+
+              <EditField
+                label="Board"
+                value={editValues.board}
+                onChange={(value) =>
+                  setEditValues((prev) => ({ ...prev, board: value }))
+                }
+              />
+
+              <EditField
+                label="Material type"
+                value={editValues.type}
+                onChange={(value) =>
+                  setEditValues((prev) => ({ ...prev, type: value }))
+                }
+              />
+
+              <div className="sm:col-span-2">
+                <label className="mb-2 block text-sm font-semibold">
+                  Description
+                </label>
+                <textarea
+                  value={editValues.description}
+                  onChange={(e) =>
+                    setEditValues((prev) => ({
+                      ...prev,
+                      description: e.target.value,
+                    }))
+                  }
+                  rows={4}
+                  placeholder="Describe the note..."
+                  className={inputClass}
+                  disabled={savingEdit}
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="mb-2 block text-sm font-semibold">
+                  Tags
+                </label>
+                <TagEditor
+                  values={editValues.tags}
+                  onChange={(values) =>
+                    setEditValues((prev) => ({ ...prev, tags: values }))
+                  }
+                  placeholder="Add a tag and press Enter"
+                  disabled={savingEdit}
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="mb-2 block text-sm font-semibold">
+                  Keywords
+                </label>
+                <TagEditor
+                  values={editValues.keywords}
+                  onChange={(values) =>
+                    setEditValues((prev) => ({
+                      ...prev,
+                      keywords: values,
+                    }))
+                  }
+                  placeholder="Add a keyword and press Enter"
+                  disabled={savingEdit}
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                onClick={() => setEditOpen(false)}
+                disabled={savingEdit}
+                className="rounded-xl border border-[var(--border)] bg-[var(--card-soft)] px-5 py-3 text-sm font-bold text-[var(--foreground)] transition hover:border-red-500/30 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={handleSaveEdit}
+                disabled={savingEdit}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingEdit ? (
+                  <Loader2 size={17} className="animate-spin" />
+                ) : (
+                  <Save size={17} />
+                )}
+                {savingEdit ? "Saving changes..." : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* REPORT MODAL */}
       {reportOpen && (
@@ -979,6 +1290,113 @@ export default function NoteDetailsPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function EditField({
+  label,
+  value,
+  onChange,
+  required = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-semibold">
+        {label}
+        {required && <span className="ml-1 text-red-500">*</span>}
+      </label>
+
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={inputClass}
+        disabled={false}
+      />
+    </div>
+  );
+}
+
+function TagEditor({
+  values,
+  onChange,
+  placeholder,
+  disabled = false,
+}: {
+  values: string[];
+  onChange: (values: string[]) => void;
+  placeholder: string;
+  disabled?: boolean;
+}) {
+  const [draft, setDraft] = useState("");
+
+  function addTag() {
+    const value = draft.trim();
+
+    if (!value) return;
+
+    if (!values.some((item) => item.toLowerCase() === value.toLowerCase())) {
+      onChange([...values, value]);
+    }
+
+    setDraft("");
+  }
+
+  function removeTag(value: string) {
+    onChange(values.filter((item) => item !== value));
+  }
+
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-soft)] p-3">
+      <div className="flex flex-wrap gap-2">
+        {values.map((value) => (
+          <span
+            key={value}
+            className="inline-flex items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-500"
+          >
+            {value}
+            <button
+              type="button"
+              onClick={() => removeTag(value)}
+              disabled={disabled}
+              className="rounded-full hover:bg-red-500/15 disabled:opacity-50"
+              aria-label={`Remove ${value}`}
+            >
+              <X size={13} />
+            </button>
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-3 flex gap-2">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addTag();
+            }
+          }}
+          placeholder={placeholder}
+          disabled={disabled}
+          className="min-w-0 flex-1 bg-transparent px-1 py-2 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)] disabled:opacity-50"
+        />
+
+        <button
+          type="button"
+          onClick={addTag}
+          disabled={disabled || !draft.trim()}
+          className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-bold text-[var(--foreground)] transition hover:border-red-500/30 disabled:opacity-50"
+        >
+          Add
+        </button>
+      </div>
     </div>
   );
 }

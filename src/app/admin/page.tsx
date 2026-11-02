@@ -33,6 +33,7 @@ import {
   Users,
   X,
   XCircle,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -64,7 +65,22 @@ type Report = {
 };
 
 type AdminTab = "pending" | "approved" | "rejected" | "reported";
+type ThumbnailResult = {
+  id: string;
+  status: "updated" | "failed" | "skipped";
+  error?: string;
+};
 
+type ThumbnailBackfillResponse = {
+  success?: boolean;
+  batchSize?: number;
+  checked?: number;
+  updated?: number;
+  failed?: number;
+  results?: ThumbnailResult[];
+  hasMore?: boolean;
+  error?: string;
+};
 export default function AdminPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -82,6 +98,57 @@ export default function AdminPage() {
   const [previewNote, setPreviewNote] = useState<Note | null>(null);
 
   const reviewSectionRef = useRef<HTMLDivElement | null>(null);
+
+  const [editingNote, setEditingNote] = useState<Note | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [thumbnailRunning, setThumbnailRunning] = useState(false);
+  const [thumbnailHasMore, setThumbnailHasMore] = useState(true);
+  const [thumbnailChecked, setThumbnailChecked] = useState(0);
+  const [thumbnailUpdated, setThumbnailUpdated] = useState(0);
+  const [thumbnailFailed, setThumbnailFailed] = useState(0);
+  const [thumbnailSkipped, setThumbnailSkipped] = useState(0);
+  const [thumbnailResults, setThumbnailResults] = useState<
+    ThumbnailResult[]
+  >([]);
+
+  // SAVE FUNCTION
+  async function saveNoteEdits(
+    noteId: string,
+    values: {
+      title: string;
+      description: string;
+      class: string;
+      subject: string;
+      topic: string;
+      board: string;
+      type: string;
+      tags: string[];
+      keywords: string[];
+    }
+  ) {
+    setSavingEdit(true);
+
+    try {
+      await updateDoc(doc(db, "notes", noteId), {
+        ...values,
+        updatedAt: new Date(),
+      });
+
+      setNotes((currentNotes) =>
+        currentNotes.map((note) =>
+          note.id === noteId ? { ...note, ...values } : note
+        )
+      );
+
+      setEditingNote(null);
+      toast.success("Note details updated");
+    } catch (error) {
+      console.error("Failed to update note:", error);
+      toast.error("Could not update note details");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   // ADMIN ACCESS
   useEffect(() => {
@@ -447,6 +514,109 @@ export default function AdminPage() {
     }, 50);
   }
 
+    async function runThumbnailBackfill() {
+    if (thumbnailRunning || !user) return;
+
+    setThumbnailRunning(true);
+
+    try {
+      const token = await user.getIdToken();
+
+      const response = await fetch(
+        "/api/admin/notes-thumbnails-backfill",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            batchSize: 10,
+          }),
+        }
+      );
+
+      const responseText = await response.text();
+
+      let data: ThumbnailBackfillResponse;
+
+      try {
+        data = JSON.parse(responseText) as ThumbnailBackfillResponse;
+      } catch {
+        console.error("Thumbnail API returned non-JSON:", responseText);
+
+        throw new Error(
+          `API returned HTML or invalid JSON. HTTP ${response.status}. Check the API route and server logs.`
+        );
+      }
+      console.log(
+        "Thumbnail backfill API results:",
+        data.results
+      );
+      if (!response.ok || !data.success) {
+        throw new Error(
+          (data as any).error || `Request failed with HTTP ${response.status}`
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || "Thumbnail backfill request failed."
+        );
+      }
+
+      const results = data.results ?? [];
+
+      setThumbnailChecked((current) => current + (data.checked ?? 0));
+      setThumbnailUpdated((current) => current + (data.updated ?? 0));
+      setThumbnailFailed((current) => current + (data.failed ?? 0));
+
+      setThumbnailSkipped(
+        (current) =>
+          current +
+          results.filter((item) => item.status === "skipped").length
+      );
+
+      setThumbnailResults((current) => [
+        ...results,
+        ...current,
+      ]);
+
+      setThumbnailHasMore(Boolean(data.hasMore));
+
+      if ((data.updated ?? 0) > 0) {
+        toast.success(
+          `Generated ${data.updated} thumbnail${data.updated === 1 ? "" : "s"}.`
+        );
+      } else if ((data.checked ?? 0) === 0) {
+        toast.success("No missing thumbnails found.");
+      } else {
+        toast.info("Batch processed. Check the results below.");
+      }
+    } catch (error) {
+      console.error("THUMBNAIL BACKFILL ERROR:", error);
+
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Thumbnail backfill failed."
+      );
+    } finally {
+      setThumbnailRunning(false);
+    }
+  }
+
+  function resetThumbnailBackfill() {
+    if (thumbnailRunning) return;
+
+    setThumbnailHasMore(true);
+    setThumbnailChecked(0);
+    setThumbnailUpdated(0);
+    setThumbnailFailed(0);
+    setThumbnailSkipped(0);
+    setThumbnailResults([]);
+  }
+
   // AUTH STATES
   if (loading || checking) {
     return <AdminLoading />;
@@ -636,6 +806,188 @@ export default function AdminPage() {
             />
           </div>
         </div>
+      </section>
+
+      {/* THUMBNAIL BACKFILL */}
+      <section className="nw-card overflow-hidden p-5 sm:p-6">
+        <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-center">
+          <div className="min-w-0">
+            <SectionEyebrow>Library maintenance</SectionEyebrow>
+
+            <h2 className="mt-1 text-xl font-black sm:text-2xl">
+              PDF Thumbnail Generator
+            </h2>
+
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
+              Generate preview images for approved notes that are
+              missing thumbnails. Each batch processes up to 10 PDFs
+              and updates only the thumbnail URL.
+            </p>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="rounded-full border border-[var(--border)] px-3 py-1.5 text-xs font-bold text-[var(--muted)]">
+                Batch size: 10
+              </span>
+
+              <span className="rounded-full border border-[var(--border)] px-3 py-1.5 text-xs font-bold text-[var(--muted)]">
+                Approved notes only
+              </span>
+
+              <span className="rounded-full border border-[var(--border)] px-3 py-1.5 text-xs font-bold text-[var(--muted)]">
+                Missing thumbnails only
+              </span>
+            </div>
+          </div>
+
+          <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+            <button
+              type="button"
+              onClick={runThumbnailBackfill}
+              disabled={thumbnailRunning || !thumbnailHasMore}
+              className="btn-primary h-12 w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+            >
+              {thumbnailRunning ? (
+                <RefreshCw size={16} className="animate-spin" />
+              ) : (
+                <Sparkles size={16} />
+              )}
+
+              {thumbnailRunning
+                ? "Processing PDFs..."
+                : thumbnailHasMore
+                  ? "Generate Missing Thumbnails"
+                  : "All Batches Processed"}
+            </button>
+
+            <button
+              type="button"
+              onClick={resetThumbnailBackfill}
+              disabled={thumbnailRunning}
+              className="btn-secondary h-12 w-full disabled:opacity-50 sm:w-auto"
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+
+        {/* BACKFILL STATISTICS */}
+        <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-4">
+            <p className="text-xs font-bold text-[var(--muted)]">
+              Checked
+            </p>
+
+            <p className="mt-2 text-2xl font-black tabular-nums">
+              {thumbnailChecked.toLocaleString()}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-4">
+            <p className="text-xs font-bold text-green-700 dark:text-green-300">
+              Updated
+            </p>
+
+            <p className="mt-2 text-2xl font-black tabular-nums text-green-600">
+              {thumbnailUpdated.toLocaleString()}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+            <p className="text-xs font-bold text-red-600">
+              Failed
+            </p>
+
+            <p className="mt-2 text-2xl font-black tabular-nums text-red-600">
+              {thumbnailFailed.toLocaleString()}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-4">
+            <p className="text-xs font-bold text-yellow-700 dark:text-yellow-300">
+              Skipped
+            </p>
+
+            <p className="mt-2 text-2xl font-black tabular-nums text-yellow-700 dark:text-yellow-300">
+              {thumbnailSkipped.toLocaleString()}
+            </p>
+          </div>
+        </div>
+
+        {/* BACKFILL STATUS */}
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]">
+            {thumbnailRunning ? (
+              <RefreshCw
+                size={15}
+                className="animate-spin text-red-500"
+              />
+            ) : thumbnailHasMore ? (
+              <Clock3 size={15} className="text-yellow-600" />
+            ) : (
+              <CheckCircle2 size={15} className="text-green-600" />
+            )}
+
+            {thumbnailRunning
+              ? "Processing the current batch..."
+              : thumbnailHasMore
+                ? "More batches may be available."
+                : "No more matching notes were found."}
+          </div>
+
+          {!thumbnailHasMore && (
+            <span className="text-xs font-black text-green-600">
+              Processing complete
+            </span>
+          )}
+        </div>
+
+        {/* INDIVIDUAL RESULTS */}
+        {thumbnailResults.length > 0 && (
+          <div className="mt-5">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-black">
+                Processing results
+              </h3>
+
+              <span className="text-xs font-semibold text-[var(--muted)]">
+                {thumbnailResults.length} records
+              </span>
+            </div>
+
+            <div className="max-h-80 space-y-2 overflow-y-auto">
+              {thumbnailResults.map((result, index) => (
+                <div
+                  key={`${result.id}-${index}`}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="break-all text-xs font-bold">
+                      {result.id}
+                    </span>
+
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase ${
+                        result.status === "updated"
+                          ? "bg-green-500/10 text-green-600"
+                          : result.status === "failed"
+                            ? "bg-red-500/10 text-red-600"
+                            : "bg-yellow-500/10 text-yellow-700 dark:text-yellow-300"
+                      }`}
+                    >
+                      {result.status}
+                    </span>
+                  </div>
+
+                  {result.error && (
+                    <p className="mt-2 break-words text-xs leading-5 text-red-600">
+                      {result.error}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* RECENT ACTIVITY */}
@@ -907,6 +1259,7 @@ export default function AdminPage() {
                   onReject={() => rejectNote(note.id)}
                   onDelete={() => deleteNote(note.id)}
                   setPreviewNote={setPreviewNote}
+                  onEdit={() => setEditingNote(note)}
                 />
               ))
             )}
@@ -987,11 +1340,219 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+      {/* NOTE EDIT MODAL */}
+      {editingNote && (
+        <NoteEditModal
+          note={editingNote}
+          saving={savingEdit}
+          onClose={() => setEditingNote(null)}
+          onSave={saveNoteEdits}
+        />
+      )}
     </main>
   );
 }
 
 // REUSABLE UI COMPONENTS
+
+type NoteEditModalProps = {
+  note: Note;
+  saving: boolean;
+  onClose: () => void;
+  onSave: (
+    noteId: string,
+    values: {
+      title: string;
+      description: string;
+      class: string;
+      subject: string;
+      topic: string;
+      board: string;
+      type: string;
+      tags: string[];
+      keywords: string[];
+    }
+  ) => Promise<void>;
+};
+
+function NoteEditModal({
+  note,
+  saving,
+  onClose,
+  onSave,
+}: NoteEditModalProps) {
+  const [title, setTitle] = useState(note.title ?? "");
+  const [description, setDescription] = useState(note.description ?? "");
+  const [className, setClassName] = useState(note.class ?? "");
+  const [subject, setSubject] = useState(note.subject ?? "");
+  const [topic, setTopic] = useState(note.topic ?? "");
+  const [board, setBoard] = useState(note.board ?? "");
+  const [type, setType] = useState(note.type ?? "");
+  const [tags, setTags] = useState((note.tags ?? []).join(", "));
+  const [keywords, setKeywords] = useState(
+    (note.keywords ?? []).join(", ")
+  );
+
+  function splitList(value: string) {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    await onSave(note.id!, {
+      title: title.trim(),
+      description: description.trim(),
+      class: className.trim(),
+      subject: subject.trim(),
+      topic: topic.trim(),
+      board: board.trim(),
+      type: type.trim(),
+      tags: splitList(tags),
+      keywords: splitList(keywords),
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--background)] p-5 shadow-2xl sm:p-7">
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold">Edit note details</h2>
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              Update the note metadata.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="rounded-lg px-3 py-2 text-sm hover:bg-[var(--muted)] disabled:opacity-50"
+          >
+            Close
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm font-medium">Title</label>
+            <input
+              required
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              className="w-full rounded-xl border border-[var(--border)] bg-transparent px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium">
+              Description
+            </label>
+            <textarea
+              rows={3}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              className="w-full rounded-xl border border-[var(--border)] bg-transparent px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium">Class</label>
+              <input
+                value={className}
+                onChange={(event) => setClassName(event.target.value)}
+                className="w-full rounded-xl border border-[var(--border)] bg-transparent px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium">Subject</label>
+              <input
+                value={subject}
+                onChange={(event) => setSubject(event.target.value)}
+                className="w-full rounded-xl border border-[var(--border)] bg-transparent px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium">Topic</label>
+              <input
+                value={topic}
+                onChange={(event) => setTopic(event.target.value)}
+                className="w-full rounded-xl border border-[var(--border)] bg-transparent px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium">Board</label>
+              <input
+                value={board}
+                onChange={(event) => setBoard(event.target.value)}
+                className="w-full rounded-xl border border-[var(--border)] bg-transparent px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium">Type</label>
+              <input
+                value={type}
+                onChange={(event) => setType(event.target.value)}
+                className="w-full rounded-xl border border-[var(--border)] bg-transparent px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium">
+              Tags <span className="text-xs opacity-60">(comma-separated)</span>
+            </label>
+            <input
+              value={tags}
+              onChange={(event) => setTags(event.target.value)}
+              className="w-full rounded-xl border border-[var(--border)] bg-transparent px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium">
+              Keywords{" "}
+              <span className="text-xs opacity-60">(comma-separated)</span>
+            </label>
+            <input
+              value={keywords}
+              onChange={(event) => setKeywords(event.target.value)}
+              className="w-full rounded-xl border border-[var(--border)] bg-transparent px-3 py-2.5 outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium disabled:opacity-50"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="submit"
+              disabled={saving || !title.trim()}
+              className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 function SectionEyebrow({ children }: { children: React.ReactNode }) {
   return (
@@ -1168,6 +1729,7 @@ function NoteCard({
   onApprove,
   onReject,
   onDelete,
+  onEdit,
   setPreviewNote,
 }: {
   note: Note;
@@ -1175,6 +1737,7 @@ function NoteCard({
   onApprove: () => void;
   onReject: () => void;
   onDelete: () => void;
+  onEdit: () => void;
   setPreviewNote: (note: Note) => void;
 }) {
   return (
@@ -1225,6 +1788,15 @@ function NoteCard({
           >
             <Eye size={16} />
             Preview details
+          </button>
+
+          <button
+            type="button"
+            onClick={onEdit}
+            className="btn-secondary h-11"
+          >
+            <Pencil size={16} />
+            Edit note
           </button>
 
           {note.status !== "approved" && (
