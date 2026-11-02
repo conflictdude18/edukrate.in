@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from "next/server";
 import {
   applicationDefault,
@@ -6,25 +5,48 @@ import {
   getApps,
   initializeApp,
 } from "firebase-admin/app";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import {
+  FieldValue,
+  getFirestore,
+} from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { extractText } from "unpdf";
 import { lookup } from "node:dns/promises";
 import ipaddr from "ipaddr.js";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+export const dynamic = "force-dynamic";
 
 const MAX_PDF_SIZE = 20_000_000;
 const MAX_TEXT_SIZE = 100_000;
 const MAX_RESULTS_PER_QUERY = 10;
 const MAX_IMPORTS_PER_RUN = 5;
+const MAX_CANDIDATES_PER_RUN = 8;
+const MAX_RUN_TIME_MS = 45_000;
+
+const SEARCH_QUERIES = [
+  "Class 12 NCERT Physics chapter wise notes PDF",
+  "Class 12 NCERT Chemistry chapter wise notes PDF",
+  "Class 12 NCERT Mathematics chapter wise notes PDF",
+  "Class 12 Biology chapter wise notes PDF",
+  "Class 11 NCERT Physics chapter wise notes PDF",
+  "Class 11 NCERT Chemistry chapter wise notes PDF",
+  "Class 11 NCERT Mathematics chapter wise notes PDF",
+  "Class 11 Biology chapter wise notes PDF",
+  "CBSE Class 12 revision notes PDF",
+  "CBSE Class 11 revision notes PDF",
+  "Class 12 board exam preparation notes PDF",
+  "Class 11 science study material PDF",
+];
 
 function getAdminApp() {
   if (getApps().length) return getApps()[0];
 
-  const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+  const serviceAccount =
+    process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+
   const bucket = process.env.FIREBASE_STORAGE_BUCKET;
 
   return initializeApp({
@@ -39,6 +61,10 @@ const app = getAdminApp();
 const db = getFirestore(app);
 const storage = getStorage(app);
 
+function urlId(url: string) {
+  return createHash("sha256").update(url).digest("hex");
+}
+
 function isPublicIp(address: string) {
   try {
     return ipaddr.parse(address).range() === "unicast";
@@ -50,7 +76,10 @@ function isPublicIp(address: string) {
 async function validateUrl(raw: string) {
   const url = new URL(raw);
 
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
+  if (
+    url.protocol !== "https:" &&
+    url.protocol !== "http:"
+  ) {
     throw new Error("Unsupported URL protocol.");
   }
 
@@ -74,7 +103,9 @@ async function validateUrl(raw: string) {
     !addresses.length ||
     addresses.some(({ address }) => !isPublicIp(address))
   ) {
-    throw new Error("URL does not resolve to a public address.");
+    throw new Error(
+      "URL does not resolve to a public address."
+    );
   }
 
   return url;
@@ -85,7 +116,7 @@ async function fetchPdf(url: string) {
 
   const response = await fetch(safeUrl.toString(), {
     redirect: "error",
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(15_000),
     headers: {
       "User-Agent": "EdukrateNotesImporter/1.0",
       Accept: "application/pdf,application/octet-stream",
@@ -93,7 +124,9 @@ async function fetchPdf(url: string) {
   });
 
   if (!response.ok) {
-    throw new Error(`PDF returned status ${response.status}.`);
+    throw new Error(
+      `PDF returned status ${response.status}.`
+    );
   }
 
   const contentType = (
@@ -156,14 +189,15 @@ function cleanText(text: string) {
   return text
     .replace(/\u00a0/g, " ")
     .replace(/[ \t]+/g, " ")
-    .replace(/\n\s\*\n+/g, "\n\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
 async function extractPdfText(buffer: Buffer) {
-  const result = await extractText(new Uint8Array(buffer), {
-    mergePages: true,
-  });
+  const result = await extractText(
+    new Uint8Array(buffer),
+    { mergePages: true }
+  );
 
   const text = cleanText(
     String(result.text ?? "")
@@ -180,14 +214,15 @@ async function extractPdfText(buffer: Buffer) {
 
 function titleFromUrl(rawUrl: string) {
   const url = new URL(rawUrl);
-  const filename = url.pathname.split("/").pop() || "Study Notes";
+  const filename =
+    url.pathname.split("/").pop() || "Study Notes";
 
   let decodedFilename = filename;
 
   try {
     decodedFilename = decodeURIComponent(filename);
   } catch {
-    // Keep the original filename if URL decoding fails.
+    // Keep the original filename.
   }
 
   return (
@@ -207,21 +242,24 @@ async function searchWeb(query: string) {
     throw new Error("TAVILY_API_KEY is not configured.");
   }
 
-  const response = await fetch("https://api.tavily.com/search", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      api_key: apiKey,
-      query,
-      search_depth: "basic",
-      max_results: MAX_RESULTS_PER_QUERY,
-      include_answer: false,
-    }),
-    signal: AbortSignal.timeout(20_000),
-  });
+  const response = await fetch(
+    "https://api.tavily.com/search",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        api_key: apiKey,
+        query,
+        search_depth: "basic",
+        max_results: MAX_RESULTS_PER_QUERY,
+        include_answer: false,
+      }),
+      signal: AbortSignal.timeout(15_000),
+    }
+  );
 
   if (!response.ok) {
     throw new Error(
@@ -240,14 +278,21 @@ async function searchWeb(query: string) {
     );
 }
 
-async function uploadPdf(buffer: Buffer, title: string) {
-  const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
+async function uploadPdf(
+  buffer: Buffer,
+  title: string
+) {
+  const bucketName =
+    process.env.FIREBASE_STORAGE_BUCKET;
+
   const bucket = bucketName
     ? storage.bucket(bucketName)
     : storage.bucket();
 
   if (!bucket.name) {
-    throw new Error("FIREBASE_STORAGE_BUCKET is not configured.");
+    throw new Error(
+      "FIREBASE_STORAGE_BUCKET is not configured."
+    );
   }
 
   const safeName =
@@ -256,7 +301,9 @@ async function uploadPdf(buffer: Buffer, title: string) {
       .replace(/\s+/g, "-")
       .slice(0, 100) || "study-notes";
 
-  const filePath = `notes/imported/${Date.now()}-${randomUUID()}-${safeName}.pdf`;
+  const filePath =
+    `notes/imported/${Date.now()}-${randomUUID()}-${safeName}.pdf`;
+
   const token = randomUUID();
 
   await bucket.file(filePath).save(buffer, {
@@ -280,41 +327,96 @@ async function uploadPdf(buffer: Buffer, title: string) {
   };
 }
 
-const SEARCH_QUERIES = [
-  "Class 12 NCERT Physics Chemistry Mathematics Biology notes PDF",
-  "Class 11 NCERT Physics Chemistry Mathematics Biology notes PDF",
-  "CBSE Class 12 revision notes chapter wise PDF",
-  "CBSE Class 11 revision notes chapter wise PDF",
-];
-
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
-  const authorization = request.headers.get("authorization");
+  const authorization =
+    request.headers.get("authorization");
 
-  if (!secret || authorization !== `Bearer ${secret}`) {
+  if (
+    !secret ||
+    authorization !== `Bearer ${secret}`
+  ) {
     return NextResponse.json(
       { error: "Unauthorized." },
       { status: 401 }
     );
   }
 
-const imported: string[] = [];
-const skipped: string[] = [];
-const errors: string[] = [];
+  const startedAt = Date.now();
+
+  const imported: string[] = [];
+  const skipped: string[] = [];
+  const errors: string[] = [];
+
+  let discovered = 0;
+  let searchQuery = "";
 
   try {
-    const foundUrls = new Set<string>();
+    // Rotate to the next search query on each invocation.
+    const rotationRef = db
+      .collection("notesImportSources")
+      .doc("_rotation");
 
-    for (const query of SEARCH_QUERIES) {
-      const urls = await searchWeb(query);
+    const rotationDoc = await rotationRef.get();
 
-      urls.forEach((url: string) => foundUrls.add(url));
-    }
+    const previousIndex = Number(
+      rotationDoc.data()?.nextIndex ?? 0
+    );
+
+    const queryIndex =
+      ((previousIndex % SEARCH_QUERIES.length) +
+        SEARCH_QUERIES.length) %
+      SEARCH_QUERIES.length;
+
+    searchQuery = SEARCH_QUERIES[queryIndex];
+
+    await rotationRef.set(
+      {
+        nextIndex:
+          (queryIndex + 1) % SEARCH_QUERIES.length,
+        lastQuery: searchQuery,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    const urls = await searchWeb(searchQuery);
+
+    const foundUrls = [
+      ...new Set(urls),
+    ].slice(0, MAX_CANDIDATES_PER_RUN);
+
+    discovered = foundUrls.length;
 
     for (const sourceUrl of foundUrls) {
-      if (imported.length >= MAX_IMPORTS_PER_RUN) break;
+      if (imported.length >= MAX_IMPORTS_PER_RUN) {
+        break;
+      }
+
+      if (
+        Date.now() - startedAt >
+        MAX_RUN_TIME_MS
+      ) {
+        errors.push(
+          "Stopped early to stay within the execution time limit."
+        );
+        break;
+      }
+
+      const sourceRef = db
+        .collection("notesImportSources")
+        .doc(urlId(sourceUrl));
 
       try {
+        // Avoid revisiting URLs previously processed.
+        const sourceDoc = await sourceRef.get();
+
+        if (sourceDoc.exists) {
+          skipped.push(sourceUrl);
+          continue;
+        }
+
+        // Check the existing notes collection as well.
         const existing = await db
           .collection("notes")
           .where("sourceUrl", "==", sourceUrl)
@@ -322,14 +424,23 @@ const errors: string[] = [];
           .get();
 
         if (!existing.empty) {
+          await sourceRef.set({
+            sourceUrl,
+            status: "duplicate",
+            updatedAt: FieldValue.serverTimestamp(),
+          });
+
           skipped.push(sourceUrl);
           continue;
         }
 
         const buffer = await fetchPdf(sourceUrl);
-        const description = await extractPdfText(buffer);
+        const description =
+          await extractPdfText(buffer);
+
         const title = titleFromUrl(sourceUrl);
-        const storageData = await uploadPdf(buffer, title);
+        const storageData =
+          await uploadPdf(buffer, title);
 
         const note = {
           title,
@@ -358,41 +469,68 @@ const errors: string[] = [];
           importSource: "web-search",
         };
 
-        await db.collection("notes").add(note);
+        const noteRef = await db
+          .collection("notes")
+          .add(note);
+
+        await sourceRef.set({
+          sourceUrl,
+          status: "imported",
+          noteId: noteRef.id,
+          title,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+
         imported.push(title);
       } catch (error) {
-        errors.push(
-          `${sourceUrl}: ${
-            error instanceof Error
-              ? error.message
-              : "Import failed"
-          }`
-        );
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Import failed.";
+
+        errors.push(`${sourceUrl}: ${message}`);
+
+        // Remember failures too, so they are not retried
+        // indefinitely on every search rotation.
+        await sourceRef.set({
+          sourceUrl,
+          status: "failed",
+          error: message.slice(0, 500),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
       }
     }
 
-  return NextResponse.json({
-    success: true,
-    discovered: foundUrls.size,
-    imported: imported.length,
-    importedTitles: imported,
-    skipped: skipped.length,
-    skippedUrls: skipped,
-    errors,
-  });
-
+    return NextResponse.json({
+      success: true,
+      searchQuery,
+      discovered,
+      imported: imported.length,
+      importedTitles: imported,
+      skipped: skipped.length,
+      skippedUrls: skipped,
+      errors,
+      elapsedMs: Date.now() - startedAt,
+    });
   } catch (error) {
     const message =
       error instanceof Error
         ? error.message
         : "Cron import failed.";
 
-    console.error("Scheduled notes import failed:", message, error);
+    console.error(
+      "Scheduled notes import failed:",
+      message,
+      error
+    );
 
     return NextResponse.json(
       {
+        success: false,
+        searchQuery,
         error: message,
         imported: imported.length,
+        elapsedMs: Date.now() - startedAt,
       },
       { status: 500 }
     );
