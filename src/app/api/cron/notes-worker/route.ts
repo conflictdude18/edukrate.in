@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
-import { adminStorage } from "@/lib/firebase-admin";
+import { adminDb, adminStorage } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { extractText } from "unpdf";
 import { lookup } from "node:dns/promises";
@@ -28,8 +27,12 @@ function isPublicAddress(address: string) {
   try {
     const parsed = ipaddr.parse(address);
 
-    if (parsed.kind() === "ipv6" && parsed.isIPv4MappedAddress()) {
-      return parsed.toIPv4Address().range() === "unicast";
+    if (parsed.kind() === "ipv6") {
+      const ipv6 = parsed as ipaddr.IPv6;
+
+      if (ipv6.isIPv4MappedAddress()) {
+        return ipv6.toIPv4Address().range() === "unicast";
+      }
     }
 
     return parsed.range() === "unicast";
@@ -37,7 +40,6 @@ function isPublicAddress(address: string) {
     return false;
   }
 }
-
 async function validateUrl(rawUrl: string) {
   const url = new URL(rawUrl);
 
@@ -167,10 +169,14 @@ async function processJob(
     const pdf = await fetchPdf(url);
     const extracted = await extractText(new Uint8Array(pdf));
 
-    const text = (extracted.text || "").slice(0, MAX_TEXT_SIZE);
+    const rawText = Array.isArray(extracted.text)
+    ? extracted.text.join("\n")
+    : extracted.text || "";
+
+    const text = rawText.slice(0, MAX_TEXT_SIZE);
 
     if (text.trim().length < 300) {
-      throw new Error("Insufficient extractable text");
+    throw new Error("Insufficient extractable text");
     }
 
     const bucket = adminStorage.bucket();

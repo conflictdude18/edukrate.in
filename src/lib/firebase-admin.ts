@@ -1,4 +1,3 @@
-```ts
 import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
@@ -6,6 +5,7 @@ import { getStorage } from "firebase-admin/storage";
 const projectId = process.env.FIREBASE_PROJECT_ID;
 const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
 const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+const storageBucket = process.env.FIREBASE_STORAGE_BUCKET;
 
 if (!projectId || !clientEmail || !privateKey) {
   throw new Error(
@@ -13,20 +13,19 @@ if (!projectId || !clientEmail || !privateKey) {
   );
 }
 
-const apps = getApps();
+const existingApps = getApps();
 
 const adminApp =
-  apps.length > 0
-    ? apps[0]
+  existingApps.length > 0
+    ? existingApps[0]
     : initializeApp({
         credential: cert({
           projectId,
           clientEmail,
           privateKey,
         }),
-        storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+        ...(storageBucket ? { storageBucket } : {}),
       });
 
 export const adminDb = getFirestore(adminApp);
 export const adminStorage = getStorage(adminApp);
-```
