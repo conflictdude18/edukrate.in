@@ -298,9 +298,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const imported: string[] = [];
-  const skipped: string[] = [];
-  const errors: string[] = [];
+const imported: string[] = [];
+const skipped: string[] = [];
+const errors: string[] = [];
 
   try {
     const foundUrls = new Set<string>();
@@ -371,14 +371,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      discovered: foundUrls.size,
-      imported: imported.length,
-      importedTitles: imported,
-      skipped: skipped.length,
-      errors,
-    });
+  return NextResponse.json({
+    success: true,
+    discovered: foundUrls.size,
+    imported: imported.length,
+    importedTitles: imported,
+    skipped: skipped.length,
+    skippedUrls: skipped,
+    errors,
+  });
+
   } catch (error) {
     const message =
       error instanceof Error
