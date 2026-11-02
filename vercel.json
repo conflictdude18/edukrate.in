@@ -1,1 +1,12 @@
-
+{
+  "crons": [
+    {
+      "path": "/api/cron/notes-discover",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/notes-worker",
+      "schedule": "30 2 * * *"
+    }
+  ]
+}
