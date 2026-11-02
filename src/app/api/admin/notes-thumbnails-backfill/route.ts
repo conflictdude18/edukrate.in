@@ -170,6 +170,7 @@ async function renderFirstPage(
       );
     }
     await page.render({
+      canvas: context as unknown as HTMLCanvasElement,
       canvasContext: context as unknown as CanvasRenderingContext2D,
       viewport,
     }).promise;
