@@ -169,9 +169,8 @@ async function renderFirstPage(
         "Failed to create a 2D canvas context."
       );
     }
-
     await page.render({
-      canvasContext: context,
+      canvasContext: context as unknown as CanvasRenderingContext2D,
       viewport,
     }).promise;
 
