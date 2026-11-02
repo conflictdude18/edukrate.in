@@ -5,10 +5,7 @@ import {
   getApps,
   initializeApp,
 } from "firebase-admin/app";
-import {
-  FieldValue,
-  getFirestore,
-} from "firebase-admin/firestore";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { extractText } from "unpdf";
 import { lookup } from "node:dns/promises";
@@ -46,7 +43,6 @@ function getAdminApp() {
 
   const serviceAccount =
     process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-
   const bucket = process.env.FIREBASE_STORAGE_BUCKET;
 
   return initializeApp({
@@ -76,10 +72,7 @@ function isPublicIp(address: string) {
 async function validateUrl(raw: string) {
   const url = new URL(raw);
 
-  if (
-    url.protocol !== "https:" &&
-    url.protocol !== "http:"
-  ) {
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
     throw new Error("Unsupported URL protocol.");
   }
 
@@ -103,16 +96,14 @@ async function validateUrl(raw: string) {
     !addresses.length ||
     addresses.some(({ address }) => !isPublicIp(address))
   ) {
-    throw new Error(
-      "URL does not resolve to a public address."
-    );
+    throw new Error("URL does not resolve to a public address.");
   }
 
   return url;
 }
 
-async function fetchPdf(url: string) {
-  const safeUrl = await validateUrl(url);
+async function fetchPdf(rawUrl: string) {
+  const safeUrl = await validateUrl(rawUrl);
 
   const response = await fetch(safeUrl.toString(), {
     redirect: "error",
@@ -124,9 +115,7 @@ async function fetchPdf(url: string) {
   });
 
   if (!response.ok) {
-    throw new Error(
-      `PDF returned status ${response.status}.`
-    );
+    throw new Error(`PDF returned status ${response.status}.`);
   }
 
   const contentType = (
@@ -194,14 +183,14 @@ function cleanText(text: string) {
 }
 
 async function extractPdfText(buffer: Buffer) {
-  const result = await extractText(
-    new Uint8Array(buffer),
-    { mergePages: true }
-  );
+  const result = await extractText(new Uint8Array(buffer), {
+    mergePages: true,
+  });
 
-  const text = cleanText(
-    String(result.text ?? "")
-  ).slice(0, MAX_TEXT_SIZE);
+  const text = cleanText(String(result.text ?? "")).slice(
+    0,
+    MAX_TEXT_SIZE
+  );
 
   if (text.length < 300) {
     throw new Error(
@@ -235,7 +224,7 @@ function titleFromUrl(rawUrl: string) {
   );
 }
 
-async function searchWeb(query: string) {
+async function searchWeb(query: string): Promise<string[]> {
   const apiKey = process.env.TAVILY_API_KEY;
 
   if (!apiKey) {
@@ -278,12 +267,8 @@ async function searchWeb(query: string) {
     );
 }
 
-async function uploadPdf(
-  buffer: Buffer,
-  title: string
-) {
-  const bucketName =
-    process.env.FIREBASE_STORAGE_BUCKET;
+async function uploadPdf(buffer: Buffer, title: string) {
+  const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
 
   const bucket = bucketName
     ? storage.bucket(bucketName)
@@ -329,13 +314,9 @@ async function uploadPdf(
 
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
-  const authorization =
-    request.headers.get("authorization");
+  const authorization = request.headers.get("authorization");
 
-  if (
-    !secret ||
-    authorization !== `Bearer ${secret}`
-  ) {
+  if (!secret || authorization !== `Bearer ${secret}`) {
     return NextResponse.json(
       { error: "Unauthorized." },
       { status: 401 }
@@ -382,9 +363,10 @@ export async function GET(request: NextRequest) {
 
     const urls = await searchWeb(searchQuery);
 
-    const foundUrls = [
-      ...new Set(urls),
-    ].slice(0, MAX_CANDIDATES_PER_RUN);
+    const foundUrls = [...new Set(urls)].slice(
+      0,
+      MAX_CANDIDATES_PER_RUN
+    );
 
     discovered = foundUrls.length;
 
@@ -393,16 +375,14 @@ export async function GET(request: NextRequest) {
         break;
       }
 
-      if (
-        Date.now() - startedAt >
-        MAX_RUN_TIME_MS
-      ) {
+      if (Date.now() - startedAt > MAX_RUN_TIME_MS) {
         errors.push(
           "Stopped early to stay within the execution time limit."
         );
         break;
       }
 
+      // sourceUrl is a string because searchWeb validates its type.
       const sourceRef = db
         .collection("notesImportSources")
         .doc(urlId(sourceUrl));
@@ -435,12 +415,10 @@ export async function GET(request: NextRequest) {
         }
 
         const buffer = await fetchPdf(sourceUrl);
-        const description =
-          await extractPdfText(buffer);
+        const description = await extractPdfText(buffer);
 
         const title = titleFromUrl(sourceUrl);
-        const storageData =
-          await uploadPdf(buffer, title);
+        const storageData = await uploadPdf(buffer, title);
 
         const note = {
           title,
@@ -490,8 +468,7 @@ export async function GET(request: NextRequest) {
 
         errors.push(`${sourceUrl}: ${message}`);
 
-        // Remember failures too, so they are not retried
-        // indefinitely on every search rotation.
+        // Remember failures to avoid retrying indefinitely.
         await sourceRef.set({
           sourceUrl,
           status: "failed",
