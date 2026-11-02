@@ -273,7 +273,7 @@ async function renderPdfThumbnail(
 
     const png = await canvas.encode("png");
 
-    await pdf.destroy();
+    await loadingTask.destroy();
 
     return Buffer.from(png);
   } catch (error) {
