@@ -18,7 +18,7 @@ export const maxDuration = 60;
 
 const MAX_PDF_SIZE = 20_000_000;
 const MAX_TEXT_SIZE = 100_000;
-const MAX_RESULTS_PER_QUERY = 20;
+const MAX_RESULTS_PER_QUERY = 10;
 const MAX_IMPORTS_PER_RUN = 5;
 
 function getAdminApp() {
@@ -281,24 +281,10 @@ async function uploadPdf(buffer: Buffer, title: string) {
 }
 
 const SEARCH_QUERIES = [
-  "Class 12 study notes PDF NCERT",
-  "Class 12 revision notes PDF physics chemistry mathematics",
-  "Class 11 study notes PDF NCERT",
-  "Class 12 biology chapter notes PDF",
-  "Class 12 NCERT Physics chapter wise notes PDF",
-  "Class 12 NCERT Chemistry chapter wise notes PDF",
-  "Class 12 NCERT Mathematics chapter wise notes PDF",
-  "Class 12 Biology chapter wise notes PDF",
-  "Class 11 NCERT Physics study notes PDF",
-  "Class 11 NCERT Chemistry study notes PDF",
-  "Class 11 NCERT Mathematics study notes PDF",
-  "Class 11 Biology chapter notes PDF",
-  "CBSE Class 12 revision notes PDF",
-  "CBSE Class 11 revision notes PDF",
-  "NCERT Class 12 handwritten notes PDF",
-  "NCERT Class 11 handwritten notes PDF",
-  "Class 12 board exam preparation notes PDF",
-  "Class 11 science study material PDF",
+  "Class 12 NCERT Physics Chemistry Mathematics Biology notes PDF",
+  "Class 11 NCERT Physics Chemistry Mathematics Biology notes PDF",
+  "CBSE Class 12 revision notes chapter wise PDF",
+  "CBSE Class 11 revision notes chapter wise PDF",
 ];
 
 export async function GET(request: NextRequest) {
