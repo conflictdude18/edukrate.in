@@ -1,197 +1,293 @@
 import { NextRequest, NextResponse } from "next/server";
+import { adminDb, adminStorage } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { extractText } from "unpdf";
-import { adminDb, adminStorage } from "@/lib/firebase-admin";
-import {
-  getUrlHash,
-  updateJob,
-} from "@/lib/notes-import/queue";
+import { lookup } from "node:dns/promises";
+import ipaddr from "ipaddr.js";
+import crypto from "node:crypto";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+export const dynamic = "force-dynamic";
 
 const MAX_PDF_SIZE = 20 * 1024 * 1024;
-const MAX_TEXT_SIZE = 500_000;
+const MAX_TEXT_SIZE = 100_000;
 const MAX_JOBS_PER_RUN = 3;
+
+function authorized(request: NextRequest) {
+  const secret = process.env.CRON_SECRET;
+
+  return (
+    !!secret &&
+    request.headers.get("authorization") === `Bearer ${secret}`
+  );
+}
+
+function isPublicAddress(address: string) {
+  try {
+    const parsed = ipaddr.parse(address);
+
+    if (parsed.kind() === "ipv6") {
+      const ipv6 = parsed as ipaddr.IPv6;
+
+      if (ipv6.isIPv4MappedAddress()) {
+        return ipv6.toIPv4Address().range() === "unicast";
+      }
+    }
+
+    return parsed.range() === "unicast";
+  } catch {
+    return false;
+  }
+}
+async function validateUrl(rawUrl: string) {
+  const url = new URL(rawUrl);
+
+  if (!["http:", "https:"].includes(url.protocol)) {
+    throw new Error("Unsupported protocol");
+  }
+
+  if (url.username || url.password) {
+    throw new Error("URL credentials are not allowed");
+  }
+
+  const hostname = url.hostname.toLowerCase();
+
+  if (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname.endsWith(".local")
+  ) {
+    throw new Error("Local addresses are not allowed");
+  }
+
+  const addresses = await lookup(hostname, { all: true });
+
+  if (!addresses.length || addresses.some((entry) => !isPublicAddress(entry.address))) {
+    throw new Error("Non-public address rejected");
+  }
+
+  return url;
+}
+
+async function fetchPdf(url: URL) {
+  const response = await fetch(url.toString(), {
+    redirect: "manual",
+    signal: AbortSignal.timeout(15000),
+    headers: {
+      "User-Agent": "Edukrate-NotesImporter/1.0",
+    },
+  });
+
+  if (response.status >= 300 && response.status < 400) {
+    throw new Error("Redirects are not allowed");
+  }
+
+  if (!response.ok) {
+    throw new Error(`PDF request failed: ${response.status}`);
+  }
+
+  const contentLength = Number(response.headers.get("content-length") || 0);
+
+  if (contentLength > MAX_PDF_SIZE) {
+    throw new Error("PDF exceeds size limit");
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+
+  if (buffer.length > MAX_PDF_SIZE) {
+    throw new Error("PDF exceeds size limit");
+  }
+
+  if (buffer.length < 5 || buffer.subarray(0, 5).toString() !== "%PDF-") {
+    throw new Error("Response is not a valid PDF");
+  }
+
+  return buffer;
+}
+
+function cleanFileName(title: string) {
+  return (
+    title
+      .replace(/[^\w\s.-]/g, "")
+      .trim()
+      .replace(/\s+/g, "-")
+      .slice(0, 100) || "imported-notes"
+  );
+}
 
 async function processJob(
   id: string,
-  job: {
-    url: string;
-    title: string;
-    attempts?: number;
-  }
+  job: { url: string; title: string }
 ) {
-  const hash = getUrlHash(job.url);
+  const jobRef = adminDb.collection("notesImportQueue").doc(id);
 
-  const existing = await adminDb
-    .collection("notes")
-    .where("sourceHash", "==", hash)
-    .limit(1)
-    .get();
-
-  if (!existing.empty) {
-    await updateJob(id, { status: "duplicate" });
-    return "duplicate";
-  }
-
-  await updateJob(id, {
+  await jobRef.update({
     status: "processing",
-    attempts: (job.attempts ?? 0) + 1,
+    attempts: FieldValue.increment(1),
+    updatedAt: FieldValue.serverTimestamp(),
   });
 
-  const response = await fetch(job.url, {
-    redirect: "error",
-    signal: AbortSignal.timeout(25_000),
-    headers: {
-      "User-Agent": "EdukrateNotesImporter/1.0",
-    },
-  });
+  try {
+    const url = await validateUrl(job.url);
 
-  if (!response.ok) {
-    throw new Error(`PDF download failed: ${response.status}`);
-  }
+    const sourceHash = crypto
+      .createHash("sha256")
+      .update(job.url)
+      .digest("hex");
 
-  const contentType = response.headers.get("content-type") ?? "";
+    const sourceRef = adminDb
+      .collection("notesImportSources")
+      .doc(sourceHash);
 
-  if (
-    !contentType.includes("pdf") &&
-    !job.url.toLowerCase().includes(".pdf")
-  ) {
-    throw new Error("The source does not appear to be a PDF");
-  }
+    const existingSource = await sourceRef.get();
 
-  const contentLength = Number(
-    response.headers.get("content-length") ?? 0
-  );
+    if (existingSource.exists) {
+      await jobRef.update({
+        status: "duplicate",
+        updatedAt: FieldValue.serverTimestamp(),
+      });
 
-  if (contentLength > MAX_PDF_SIZE) {
-    throw new Error("PDF exceeds the 20 MB limit");
-  }
+      return "duplicate";
+    }
 
-  const buffer = await response.arrayBuffer();
+    const existingNote = await adminDb
+      .collection("notes")
+      .where("sourceUrl", "==", job.url)
+      .limit(1)
+      .get();
 
-  if (buffer.byteLength > MAX_PDF_SIZE) {
-    throw new Error("PDF exceeds the 20 MB limit");
-  }
+    if (!existingNote.empty) {
+      await jobRef.update({
+        status: "duplicate",
+        updatedAt: FieldValue.serverTimestamp(),
+      });
 
-  const pdf = new Uint8Array(buffer);
+      return "duplicate";
+    }
 
-  const signature = new TextDecoder().decode(pdf.slice(0, 5));
+    const pdf = await fetchPdf(url);
+    const extracted = await extractText(new Uint8Array(pdf));
 
-  if (signature !== "%PDF-") {
-    throw new Error("Downloaded file is not a valid PDF");
-  }
-
-  const extracted = await extractText(pdf);
-
-  const rawText = Array.isArray(extracted.text)
+    const rawText = Array.isArray(extracted.text)
     ? extracted.text.join("\n")
     : extracted.text || "";
 
-  const text = rawText.slice(0, MAX_TEXT_SIZE);
+    const text = rawText.slice(0, MAX_TEXT_SIZE);
 
-  if (text.trim().length < 300) {
+    if (text.trim().length < 300) {
     throw new Error("Insufficient extractable text");
+    }
+
+    const bucket = adminStorage.bucket();
+    const fileName = `${cleanFileName(job.title)}-${id}.pdf`;
+    const filePath = `notes/imported/${fileName}`;
+
+    const token = crypto.randomUUID();
+
+    const file = bucket.file(filePath);
+
+    await file.save(pdf, {
+      resumable: false,
+      metadata: {
+        contentType: "application/pdf",
+        metadata: {
+          firebaseStorageDownloadTokens: token,
+        },
+      },
+    });
+
+    const pdfURL =
+      `https://firebasestorage.googleapis.com/v0/b/${bucket.name}` +
+      `/o/${encodeURIComponent(filePath)}?alt=media&token=${token}`;
+
+    const noteRef = adminDb.collection("notes").doc();
+
+    await noteRef.set({
+      title: job.title,
+      description: text.slice(0, 500),
+      class: "",
+      subject: "",
+      board: "",
+      topic: "",
+      tags: [],
+      keywords: [],
+      type: "Imported",
+      pdfURL,
+      filePath,
+      fileName,
+      fileSize: pdf.length,
+      thumbnailUrl: "",
+      uploaderId: "system",
+      uploaderName: "Edukrate Importer",
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      downloadsCount: 0,
+      status: "pending",
+      sourceUrl: job.url,
+      importSource: "web-search",
+    });
+
+    await sourceRef.set({
+      sourceUrl: job.url,
+      noteId: noteRef.id,
+      status: "imported",
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    await jobRef.update({
+      status: "imported",
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return "imported";
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Import failed";
+
+    await jobRef.update({
+      status: "failed",
+      error: message.slice(0, 500),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return "failed";
   }
-
-  const bucket = adminStorage.bucket();
-
-  const storagePath = `imported-notes/${hash}.pdf`;
-
-  await bucket.file(storagePath).save(Buffer.from(pdf), {
-    resumable: false,
-    metadata: {
-      contentType: "application/pdf",
-    },
-  });
-
-  const file = bucket.file(storagePath);
-
-  const [downloadUrl] = await file.getSignedUrl({
-    action: "read",
-    expires: "2500-01-01",
-  });
-
-  const noteRef = adminDb.collection("notes").doc();
-
-  await noteRef.set({
-    title: job.title,
-    description: text.slice(0, 1000),
-    content: text,
-    fileUrl: downloadUrl,
-    pdfUrl: downloadUrl,
-    sourceUrl: job.url,
-    sourceHash: hash,
-    storagePath,
-    createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
-    importedBy: "automated-importer",
-  });
-
-  await updateJob(id, {
-    status: "imported",
-    error: undefined,
-  });
-
-  return "imported";
 }
 
 export async function GET(request: NextRequest) {
-  const cronSecret = process.env.CRON_SECRET;
-  const authHeader = request.headers.get("authorization");
-
-  if (
-    !cronSecret ||
-    authHeader !== `Bearer ${cronSecret}`
-  ) {
-    return NextResponse.json(
-      { error: "Unauthorized" },
-      { status: 401 }
-    );
+  if (!authorized(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const queue = adminDb.collection("notesImportQueue");
-
-  const snapshot = await queue
+  const snapshot = await adminDb
+    .collection("notesImportQueue")
     .where("status", "==", "queued")
     .limit(MAX_JOBS_PER_RUN)
     .get();
 
   let imported = 0;
-  let duplicate = 0;
+  let duplicates = 0;
   let failed = 0;
 
   for (const document of snapshot.docs) {
     const job = document.data() as {
       url: string;
       title: string;
-      attempts?: number;
     };
 
-    try {
-      const result = await processJob(document.id, job);
+    const result = await processJob(document.id, job);
 
-      if (result === "imported") imported++;
-      if (result === "duplicate") duplicate++;
-    } catch (error) {
-      failed++;
-
-      await updateJob(document.id, {
-        status: "failed",
-        error:
-          error instanceof Error
-            ? error.message.slice(0, 500)
-            : "Unknown worker error",
-      });
-    }
+    if (result === "imported") imported++;
+    else if (result === "duplicate") duplicates++;
+    else failed++;
   }
 
   return NextResponse.json({
-    ok: true,
+    success: true,
     processed: snapshot.size,
     imported,
-    duplicate,
+    duplicates,
     failed,
   });
 }

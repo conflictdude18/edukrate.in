@@ -1,5 +1,5 @@
 import { adminDb } from "@/lib/firebase-admin";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import crypto from "node:crypto";
 
 export type ImportJobStatus =
@@ -14,8 +14,8 @@ export type ImportJob = {
   title: string;
   status: ImportJobStatus;
   attempts: number;
-  createdAt?: unknown;
-  updatedAt?: unknown;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
   error?: string;
 };
 
@@ -30,9 +30,7 @@ export async function enqueuePdf(url: string, title: string) {
   await adminDb.runTransaction(async (transaction) => {
     const existing = await transaction.get(ref);
 
-    if (existing.exists) {
-      return;
-    }
+    if (existing.exists) return;
 
     transaction.set(ref, {
       url,
