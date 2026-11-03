@@ -48,18 +48,20 @@ function isPdfCandidate(item: {
 export async function GET(request: NextRequest) {
   if (!authorized(request)) {
     console.error("[notes-discover] Unauthorized request");
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401 }
+    );
   }
+
+  console.log("[notes-discover] Started");
 
   const apiKey = process.env.TAVILY_API_KEY;
 
-  console.log("[notes-discover] Finished", {
-    discovered,
-    queued,
-    errors,
-  });
-  
   if (!apiKey) {
+    console.error("[notes-discover] TAVILY_API_KEY is missing");
+
     return NextResponse.json(
       { error: "TAVILY_API_KEY is missing" },
       { status: 500 }
@@ -113,15 +115,26 @@ export async function GET(request: NextRequest) {
           await enqueuePdf(url, item.title || "Imported notes");
           queued++;
         } catch {
-          // Skip malformed URLs.
+          // Skip malformed URLs or enqueue failures.
         }
       }
     } catch (error) {
-      errors.push(
-        error instanceof Error ? error.message : "Search failed"
-      );
+      const message =
+        error instanceof Error ? error.message : "Search failed";
+
+      errors.push(message);
+      console.error("[notes-discover] Search failed", {
+        query,
+        error: message,
+      });
     }
   }
+
+  console.log("[notes-discover] Finished", {
+    discovered,
+    queued,
+    errors,
+  });
 
   return NextResponse.json({
     success: true,
