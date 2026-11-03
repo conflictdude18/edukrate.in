@@ -47,11 +47,18 @@ function isPdfCandidate(item: {
 
 export async function GET(request: NextRequest) {
   if (!authorized(request)) {
+    console.error("[notes-discover] Unauthorized request");
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const apiKey = process.env.TAVILY_API_KEY;
 
+  console.log("[notes-discover] Finished", {
+    discovered,
+    queued,
+    errors,
+  });
+  
   if (!apiKey) {
     return NextResponse.json(
       { error: "TAVILY_API_KEY is missing" },
