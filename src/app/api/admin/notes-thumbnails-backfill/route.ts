@@ -6,17 +6,29 @@ import {
   initializeApp,
 } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getFirestore } from "firebase-admin/firestore";
+import {
+  FieldPath,
+  getFirestore,
+} from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { randomUUID } from "node:crypto";
 import { createCanvas } from "@napi-rs/canvas";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
+
+const require = createRequire(`${process.cwd()}/package.json`);
+
+pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(
+  require.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs")
+).href;
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const MAX_PDF_SIZE = 20_000_000;
 const MAX_BATCH_SIZE = 10;
+const SCAN_PAGE_SIZE = 50;
 
 function getFirebaseAdminApp() {
   if (getApps().length > 0) return getApps()[0];
@@ -38,14 +50,13 @@ function getFirebaseAdminApp() {
   });
 }
 
-const firebaseAdminApp = getFirebaseAdminApp();
-const adminAuth = getAuth(firebaseAdminApp);
-const adminDb = getFirestore(firebaseAdminApp);
-const adminStorage = getStorage(firebaseAdminApp);
+const app = getFirebaseAdminApp();
+const adminAuth = getAuth(app);
+const adminDb = getFirestore(app);
+const adminStorage = getStorage(app);
 
 function getStorageBucket() {
   const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
-
   const bucket = bucketName
     ? adminStorage.bucket(bucketName)
     : adminStorage.bucket();
@@ -73,9 +84,7 @@ function isTrustedFirebaseStorageUrl(rawUrl: string) {
 
 async function downloadPdf(pdfURL: string): Promise<Buffer> {
   if (!isTrustedFirebaseStorageUrl(pdfURL)) {
-    throw new Error(
-      "PDF URL is not a trusted Firebase Storage URL."
-    );
+    throw new Error("PDF URL is not a trusted Firebase Storage URL.");
   }
 
   const response = await fetch(pdfURL, {
@@ -84,16 +93,12 @@ async function downloadPdf(pdfURL: string): Promise<Buffer> {
   });
 
   if (!response.ok) {
-    throw new Error(
-      `PDF download returned ${response.status}.`
-    );
+    throw new Error(`PDF download returned ${response.status}.`);
   }
 
-  const declaredLength = Number(
-    response.headers.get("content-length") || 0
-  );
+  const length = Number(response.headers.get("content-length") || 0);
 
-  if (declaredLength > MAX_PDF_SIZE) {
+  if (length > MAX_PDF_SIZE) {
     throw new Error("PDF exceeds the 20 MB processing limit.");
   }
 
@@ -116,9 +121,7 @@ async function downloadPdf(pdfURL: string): Promise<Buffer> {
 
       if (total > MAX_PDF_SIZE) {
         await reader.cancel();
-        throw new Error(
-          "PDF exceeds the 20 MB processing limit."
-        );
+        throw new Error("PDF exceeds the 20 MB processing limit.");
       }
 
       chunks.push(value);
@@ -136,9 +139,7 @@ async function downloadPdf(pdfURL: string): Promise<Buffer> {
   return buffer;
 }
 
-async function renderFirstPage(
-  buffer: Buffer
-): Promise<Buffer> {
+async function renderFirstPage(buffer: Buffer): Promise<Buffer> {
   const loadingTask = pdfjs.getDocument({
     data: new Uint8Array(buffer),
     useSystemFonts: true,
@@ -154,24 +155,16 @@ async function renderFirstPage(
       Math.ceil(viewport.height)
     );
 
-    console.log("[Canvas diagnostic]", {
-      canvasType: typeof canvas,
-      canvasConstructor: canvas?.constructor?.name,
-      canvasKeys: Object.keys(canvas ?? {}),
-      getContextType: typeof canvas?.getContext,
-      canvasModule: typeof createCanvas,
-    });
-
     const context = canvas.getContext("2d");
 
     if (!context) {
-      throw new Error(
-        "Failed to create a 2D canvas context."
-      );
+      throw new Error("Failed to create a 2D canvas context.");
     }
+
     await page.render({
-      canvas: context as unknown as HTMLCanvasElement,
-      canvasContext: context as unknown as CanvasRenderingContext2D,
+      canvas: canvas as unknown as HTMLCanvasElement,
+      canvasContext:
+        context as unknown as CanvasRenderingContext2D,
       viewport,
     }).promise;
 
@@ -182,8 +175,7 @@ async function renderFirstPage(
 }
 
 async function verifyAdmin(request: NextRequest) {
-  const authorization =
-    request.headers.get("authorization");
+  const authorization = request.headers.get("authorization");
 
   if (!authorization?.startsWith("Bearer ")) {
     throw new Error("AUTH_REQUIRED");
@@ -228,15 +220,13 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      {
-        error:
-          "Invalid or expired authentication token.",
-      },
+      { error: "Invalid or expired authentication token." },
       { status: 401 }
     );
   }
 
   let batchSize = MAX_BATCH_SIZE;
+  let cursor = "";
 
   try {
     const body = await request.json().catch(() => ({}));
@@ -247,22 +237,32 @@ export async function POST(request: NextRequest) {
         Math.min(MAX_BATCH_SIZE, body.batchSize)
       );
     }
+
+    if (typeof body?.cursor === "string") {
+      cursor = body.cursor.trim();
+    }
   } catch {
-    // Use the default batch size.
+    // Use defaults.
   }
 
   try {
     const bucket = getStorageBucket();
+    const notesRef = adminDb.collection("notes");
 
-    const snapshot = await adminDb
-      .collection("notes")
-      .where("status", "==", "approved")
-      .where("thumbnailUrl", "==", "")
-      .limit(batchSize)
-      .get();
+    let cursorDoc = cursor
+      ? await notesRef.doc(cursor).get()
+      : null;
+
+    if (cursorDoc && !cursorDoc.exists) {
+      cursorDoc = null;
+      cursor = "";
+    }
 
     let updated = 0;
     let failed = 0;
+    let checked = 0;
+    let hasMore = false;
+    let nextCursor = cursor;
 
     const results: Array<{
       id: string;
@@ -270,127 +270,180 @@ export async function POST(request: NextRequest) {
       error?: string;
     }> = [];
 
-    for (const noteDoc of snapshot.docs) {
-      const data = noteDoc.data();
+    while (updated + failed < batchSize) {
+      let query = notesRef
+        .where("status", "==", "approved")
+        .orderBy(FieldPath.documentId())
+        .limit(SCAN_PAGE_SIZE);
 
-      const pdfURL =
-        typeof data.pdfURL === "string"
-          ? data.pdfURL
-          : "";
-
-      if (!pdfURL) {
-        failed++;
-
-        results.push({
-          id: noteDoc.id,
-          status: "failed",
-          error: "Missing pdfURL.",
-        });
-
-        continue;
+      if (cursorDoc?.exists) {
+        query = query.startAfter(cursorDoc);
       }
 
-      let uploadedPath: string | null = null;
+      const page = await query.get();
 
-      try {
-        const pdfBuffer = await downloadPdf(pdfURL);
-        const pngBuffer = await renderFirstPage(pdfBuffer);
+      if (page.empty) {
+        hasMore = false;
+        break;
+      }
 
-        const filePath =
-          `notes/thumbnails/${noteDoc.id}-${Date.now()}.png`;
+      let reachedBatchLimit = false;
 
-        const token = randomUUID();
-        const file = bucket.file(filePath);
+      for (const noteDoc of page.docs) {
+        nextCursor = noteDoc.id;
+        cursorDoc = noteDoc;
+        checked++;
 
-        await file.save(pngBuffer, {
-          resumable: false,
-          contentType: "image/png",
-          metadata: {
-            contentType: "image/png",
-            metadata: {
-              firebaseStorageDownloadTokens: token,
-            },
-          },
-        });
-
-        uploadedPath = filePath;
-
+        const data = noteDoc.data();
         const thumbnailUrl =
-          "https://firebasestorage.googleapis.com/v0/b/" +
-          bucket.name +
-          "/o/" +
-          encodeURIComponent(filePath) +
-          "?alt=media&token=" +
-          token;
+          typeof data.thumbnailUrl === "string"
+            ? data.thumbnailUrl.trim()
+            : "";
 
-        // Avoid overwriting a thumbnail added while this
-        // request was processing the PDF.
-        const latest = await noteDoc.ref.get();
-        const latestData = latest.data();
+        // Existing thumbnails don't need processing.
+        if (thumbnailUrl) continue;
 
-        if (
-          latestData?.status !== "approved" ||
-          (typeof latestData?.thumbnailUrl === "string" &&
-            latestData.thumbnailUrl.trim() !== "")
-        ) {
-          await file.delete().catch(() => undefined);
+        // Stop after this batch has enough missing-thumbnail
+        // notes. The cursor points to the last scanned note.
+        if (updated + failed >= batchSize) {
+          reachedBatchLimit = true;
+          break;
+        }
 
+        const pdfURL =
+          typeof data.pdfURL === "string"
+            ? data.pdfURL
+            : "";
+
+        if (!pdfURL) {
+          failed++;
           results.push({
             id: noteDoc.id,
-            status: "skipped",
+            status: "failed",
+            error: "Missing pdfURL.",
           });
-
           continue;
         }
 
-        // Only update the thumbnail URL.
-        await noteDoc.ref.update({
-          thumbnailUrl,
-        });
+        let uploadedPath: string | null = null;
 
-        updated++;
+        try {
+          const pdfBuffer = await downloadPdf(pdfURL);
+          const pngBuffer = await renderFirstPage(pdfBuffer);
 
-        results.push({
-          id: noteDoc.id,
-          status: "updated",
-        });
-        
-      } catch (error) {
-        failed++;
+          const filePath =
+            `notes/thumbnails/${noteDoc.id}-${Date.now()}.png`;
 
-        const errorMessage =
-          error instanceof Error
-            ? error.message
-            : String(error);
+          const token = randomUUID();
+          const file = bucket.file(filePath);
 
-        console.error(
-          `[Thumbnail Backfill] Note ${noteDoc.id} failed:`,
-          error
-        );
+          await file.save(pngBuffer, {
+            resumable: false,
+            contentType: "image/png",
+            metadata: {
+              contentType: "image/png",
+              metadata: {
+                firebaseStorageDownloadTokens: token,
+              },
+            },
+          });
 
-        if (uploadedPath) {
-          await bucket
-            .file(uploadedPath)
-            .delete()
-            .catch(() => undefined);
+          uploadedPath = filePath;
+
+          const thumbnailUrl =
+            "https://firebasestorage.googleapis.com/v0/b/" +
+            bucket.name +
+            "/o/" +
+            encodeURIComponent(filePath) +
+            "?alt=media&token=" +
+            token;
+
+          const latest = await noteDoc.ref.get();
+          const latestData = latest.data();
+          const latestThumbnail =
+            typeof latestData?.thumbnailUrl === "string"
+              ? latestData.thumbnailUrl.trim()
+              : "";
+
+          if (
+            latestData?.status !== "approved" ||
+            latestThumbnail
+          ) {
+            await file.delete().catch(() => undefined);
+
+            results.push({
+              id: noteDoc.id,
+              status: "skipped",
+            });
+
+            continue;
+          }
+
+          await noteDoc.ref.update({ thumbnailUrl });
+
+          updated++;
+          results.push({
+            id: noteDoc.id,
+            status: "updated",
+          });
+        } catch (error) {
+          failed++;
+
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : String(error);
+
+          console.error(
+            `[Thumbnail Backfill] ${noteDoc.id} failed:`,
+            error
+          );
+
+          if (uploadedPath) {
+            await bucket
+              .file(uploadedPath)
+              .delete()
+              .catch(() => undefined);
+          }
+
+          results.push({
+            id: noteDoc.id,
+            status: "failed",
+            error: errorMessage,
+          });
         }
 
-        results.push({
-          id: noteDoc.id,
-          status: "failed",
-          error: errorMessage,
-        });
+        if (updated + failed >= batchSize) {
+          reachedBatchLimit = true;
+          break;
+        }
       }
+
+      if (reachedBatchLimit) {
+        // The cursor will resume after the last scanned document.
+        hasMore = true;
+        break;
+      }
+
+      if (page.size < SCAN_PAGE_SIZE) {
+        hasMore = false;
+        break;
+      }
+
+      // Continue scanning if this page contained mostly notes
+      // that already have thumbnails.
+      hasMore = true;
     }
 
     return NextResponse.json({
       success: true,
       batchSize,
-      checked: snapshot.size,
+      checked,
       updated,
       failed,
       results,
-      hasMore: snapshot.size === batchSize,
+      hasMore,
+      nextCursor,
     });
   } catch (error) {
     console.error("Thumbnail backfill error:", error);

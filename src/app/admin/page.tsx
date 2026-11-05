@@ -76,6 +76,7 @@ type ThumbnailBackfillResponse = {
   batchSize?: number;
   checked?: number;
   updated?: number;
+  nextCursor?: string;
   failed?: number;
   results?: ThumbnailResult[];
   hasMore?: boolean;
@@ -110,6 +111,17 @@ export default function AdminPage() {
   const [thumbnailResults, setThumbnailResults] = useState<
     ThumbnailResult[]
   >([]);
+
+    const [aiClass, setAiClass] = useState("12");
+    const [aiBoard, setAiBoard] = useState("Maharashtra State Board");
+    const [aiSubject, setAiSubject] = useState("");
+    const [aiTopic, setAiTopic] = useState("");
+    const [aiGenerating, setAiGenerating] = useState(false);
+    const [aiGeneratedNote, setAiGeneratedNote] = useState<{
+      noteId: string;
+      title: string;
+      status: string;
+    } | null>(null);
 
   // SAVE FUNCTION
   async function saveNoteEdits(
@@ -513,7 +525,8 @@ export default function AdminPage() {
       });
     }, 50);
   }
-
+  
+  const [thumbnailCursor, setThumbnailCursor] = useState("");
     async function runThumbnailBackfill() {
     if (thumbnailRunning || !user) return;
 
@@ -532,6 +545,7 @@ export default function AdminPage() {
           },
           body: JSON.stringify({
             batchSize: 10,
+            cursor: thumbnailCursor,
           }),
         }
       );
@@ -558,6 +572,8 @@ export default function AdminPage() {
           (data as any).error || `Request failed with HTTP ${response.status}`
         );
       }
+      
+      setThumbnailCursor(data.nextCursor ?? "");
 
       if (!response.ok) {
         throw new Error(
@@ -615,6 +631,74 @@ export default function AdminPage() {
     setThumbnailFailed(0);
     setThumbnailSkipped(0);
     setThumbnailResults([]);
+    setThumbnailCursor("");
+  }
+  async function generateAiNote() {
+    if (!user || aiGenerating) return;
+
+    if (!aiClass.trim() || !aiSubject.trim() || !aiTopic.trim()) {
+      toast.error("Class, subject, and topic are required.");
+      return;
+    }
+
+    setAiGenerating(true);
+    setAiGeneratedNote(null);
+
+    try {
+      const token = await user.getIdToken();
+
+      const response = await fetch("/api/admin/generate-note", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          class: aiClass.trim(),
+          board: aiBoard.trim(),
+          subject: aiSubject.trim(),
+          topic: aiTopic.trim(),
+        }),
+      });
+
+      const responseText = await response.text();
+
+      let data: any;
+
+      try {
+        data = JSON.parse(responseText);
+      } catch {
+        console.error("API returned non-JSON response:", responseText);
+
+        throw new Error(
+          `API returned HTML or invalid JSON. Check the API route. Status: ${response.status}`
+        );
+      }
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "AI note generation failed.");
+      }
+
+      setAiGeneratedNote({
+        noteId: data.noteId,
+        title: data.title,
+        status: data.status,
+      });
+
+      toast.success("AI note generated and saved for review.");
+
+      await fetchAdminData();
+    } catch (error) {
+      console.error("AI NOTE GENERATION ERROR:", error);
+
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Could not generate the note."
+      );
+    } finally {
+      setAiGenerating(false);
+    }
   }
 
   // AUTH STATES
@@ -806,6 +890,145 @@ export default function AdminPage() {
             />
           </div>
         </div>
+      </section>
+
+      {/* AI NOTE GENERATOR */}
+      <section className="nw-card overflow-hidden p-5 sm:p-6">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div>
+            <SectionEyebrow>AI content creation</SectionEyebrow>
+            <h2 className="mt-1 text-xl font-black sm:text-2xl">
+              AI Note Generator
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)]">
+              Generate structured study notes and a PDF using AI.
+              Generated notes are saved as pending and require admin approval.
+            </p>
+          </div>
+
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-600">
+            <Sparkles size={22} />
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-2 block text-xs font-black text-[var(--muted)]">
+              Class
+            </label>
+            <select
+              value={aiClass}
+              onChange={(event) => setAiClass(event.target.value)}
+              className="nw-input h-12"
+              disabled={aiGenerating}
+            >
+              {Array.from({ length: 12 }, (_, index) => (
+                <option key={index + 1} value={String(index + 1)}>
+                  Class {index + 1}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-xs font-black text-[var(--muted)]">
+              Board
+            </label>
+            <select
+              value={aiBoard}
+              onChange={(event) => setAiBoard(event.target.value)}
+              className="nw-input h-12"
+              disabled={aiGenerating}
+            >
+              <option value="Maharashtra State Board">
+                Maharashtra State Board
+              </option>
+              <option value="CBSE">CBSE</option>
+              <option value="ICSE">ICSE</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-xs font-black text-[var(--muted)]">
+              Subject
+            </label>
+            <input
+              value={aiSubject}
+              onChange={(event) => setAiSubject(event.target.value)}
+              placeholder="e.g. Physics"
+              className="nw-input h-12"
+              disabled={aiGenerating}
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-xs font-black text-[var(--muted)]">
+              Chapter / Topic
+            </label>
+            <input
+              value={aiTopic}
+              onChange={(event) => setAiTopic(event.target.value)}
+              placeholder="e.g. Laws of Motion"
+              className="nw-input h-12"
+              disabled={aiGenerating}
+            />
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={generateAiNote}
+          disabled={
+            aiGenerating ||
+            !aiClass.trim() ||
+            !aiSubject.trim() ||
+            !aiTopic.trim()
+          }
+          className="btn-primary mt-5 h-12 w-full disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+        >
+          {aiGenerating ? (
+            <RefreshCw size={16} className="animate-spin" />
+          ) : (
+            <Sparkles size={16} />
+          )}
+          {aiGenerating ? "Generating PDF..." : "Generate AI Note"}
+        </button>
+
+        {aiGeneratedNote && (
+          <div className="mt-5 rounded-xl border border-green-500/20 bg-green-500/5 p-4">
+            <div className="flex items-start gap-3">
+              <CheckCircle2
+                size={20}
+                className="mt-0.5 shrink-0 text-green-600"
+              />
+
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-black text-green-700 dark:text-green-300">
+                  Note generated successfully
+                </p>
+
+                <p className="mt-1 break-words text-sm font-semibold">
+                  {aiGeneratedNote.title}
+                </p>
+
+                <p className="mt-2 text-xs text-[var(--muted)]">
+                  Status: {aiGeneratedNote.status} · Note ID:{" "}
+                  {aiGeneratedNote.noteId}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => openModerationTab("pending")}
+                  className="mt-3 inline-flex items-center gap-2 text-xs font-black text-red-600 hover:text-red-500"
+                >
+                  Review pending notes
+                  <ArrowRight size={14} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* THUMBNAIL BACKFILL */}

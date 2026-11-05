@@ -4,7 +4,6 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
@@ -535,40 +534,43 @@ function NoteCard({
       href={href}
       className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] transition duration-200 hover:-translate-y-1 hover:border-red-500/40 hover:shadow-xl hover:shadow-black/10"
     >
-      {/* Thumbnail */}
-      <div className="relative h-48 overflow-hidden bg-[var(--card-soft)] sm:h-52 lg:h-56">
-        {note.thumbnailUrl ? (
-          <Image
-            src={note.thumbnailUrl}
-            alt={note.title || "Note thumbnail"}
-            fill
-            sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 25vw"
-            className="object-cover transition duration-500 group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center">
-            <FileText size={42} className="text-[var(--muted)]" />
-          </div>
-        )}
+    {/* Thumbnail */}
+    <div className="relative h-48 overflow-hidden bg-[var(--card-soft)] sm:h-52 lg:h-56">
+      {note.thumbnailUrl ? (
+        <img
+          src={note.thumbnailUrl}
+          alt={note.title || "Note thumbnail"}
+          className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+          loading="lazy"
+          onError={(event) => {
+            console.error("Thumbnail failed to load:", note.thumbnailUrl);
+            event.currentTarget.style.display = "none";
+          }}
+        />
+      ) : (
+        <div className="flex h-full items-center justify-center">
+          <FileText size={42} className="text-[var(--muted)]" />
+        </div>
+      )}
 
-        <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/65 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/65 to-transparent" />
 
-        <div className="absolute bottom-3 left-3 flex flex-wrap gap-1.5">
+      <div className="absolute bottom-3 left-3 flex flex-wrap gap-1.5">
+        <span className="rounded-full border border-white/15 bg-black/65 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">
+          {formatClassLabel(note.class)}
+        </span>
+
+        {note.type && (
           <span className="rounded-full border border-white/15 bg-black/65 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">
-            {formatClassLabel(note.class)}
+            {note.type}
           </span>
-
-          {note.type && (
-            <span className="rounded-full border border-white/15 bg-black/65 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">
-              {note.type}
-            </span>
-          )}
-        </div>
-
-        <div className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/65 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">
-          {note.board || "Community"}
-        </div>
+        )}
       </div>
+
+      <div className="absolute right-3 top-3 rounded-full border border-white/15 bg-black/65 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">
+        {note.board || "Community"}
+      </div>
+    </div>
 
       {/* Card content */}
       <div className="flex flex-1 flex-col p-4">
