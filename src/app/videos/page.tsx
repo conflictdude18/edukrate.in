@@ -1,11 +1,24 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
 import VideoCard from "@/components/videos/VideoCard";
 import LoadingSpinner from "@/components/LoadingSpinner";
-import { getVideos } from "@/lib/videos";
+import EdukratePlayer from "@/components/videos/EdukratePlayer";
+import {
+  getVideosPage,
+  type VideosPage,
+} from "@/lib/videos";
+
 import type { Video } from "@/types/video";
+
 import {
   Search,
   SlidersHorizontal,
@@ -15,6 +28,8 @@ import {
   X,
   PlayCircle,
 } from "lucide-react";
+
+const PAGE_SIZE = 20;
 
 const CLASSES = ["All", "9", "10", "11", "12", "JEE", "NEET"];
 
@@ -39,6 +54,16 @@ type YouTubeSearchResult = {
 export default function VideosPage() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const [lastDocument, setLastDocument] =
+    useState<VideosPage["lastDocument"]>(null);
+
+  const [hasMore, setHasMore] = useState(true);
+
+  const loadingRef = useRef(false);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+
   const [search, setSearch] = useState("");
   const [selectedClass, setSelectedClass] = useState("All");
   const [selectedSubject, setSelectedSubject] = useState("All");
@@ -47,37 +72,87 @@ export default function VideosPage() {
   const [youtubeResults, setYoutubeResults] = useState<
     YouTubeSearchResult[]
   >([]);
+
   const [youtubeLoading, setYoutubeLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
+
   const [selectedYoutubeVideo, setSelectedYoutubeVideo] =
     useState<YouTubeSearchResult | null>(null);
 
-  useEffect(() => {
-    let active = true;
+  // Fetch the next batch of videos.
+  const loadMoreVideos = useCallback(async () => {
+    if (loadingRef.current || !hasMore) return;
 
-    async function loadVideos() {
-      try {
-        const result = await getVideos();
+    loadingRef.current = true;
 
-        if (active) {
-          setVideos(result);
-        }
-      } catch (error) {
-        console.error("Failed to load videos:", error);
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
+    const isInitialLoad = lastDocument === null;
+
+    if (isInitialLoad) {
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
     }
 
-    loadVideos();
+    try {
+      const result = await getVideosPage(
+        lastDocument,
+        PAGE_SIZE
+      );
 
-    return () => {
-      active = false;
-    };
+      setVideos((previous) => {
+        const existingIds = new Set(
+          previous.map((video) => video.id)
+        );
+
+        const newVideos = result.videos.filter(
+          (video) => !existingIds.has(video.id)
+        );
+
+        return [...previous, ...newVideos];
+      });
+
+      setLastDocument(result.lastDocument);
+      setHasMore(result.hasMore);
+    } catch (error) {
+      console.error("Failed to load videos:", error);
+    } finally {
+      loadingRef.current = false;
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }, [lastDocument, hasMore]);
+
+  // Initial video fetch.
+  useEffect(() => {
+    void loadMoreVideos();
+
+    // Initial load only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Automatically load more when the user approaches the bottom.
+  useEffect(() => {
+    const target = loadMoreRef.current;
+
+    if (!target || !hasMore || loading) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          void loadMoreVideos();
+        }
+      },
+      {
+        rootMargin: "400px",
+      }
+    );
+
+    observer.observe(target);
+
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadMoreVideos]);
+
+  // Search and filter videos already loaded from Firestore.
   const filteredVideos = useMemo(() => {
     const query = search.trim().toLowerCase();
 
@@ -99,7 +174,10 @@ export default function VideosPage() {
       const classValue = normalize(video.classLevel);
       const examValue = normalize(video.exam);
 
-      if (selectedClass === "JEE" || selectedClass === "NEET") {
+      if (
+        selectedClass === "JEE" ||
+        selectedClass === "NEET"
+      ) {
         const selected = normalize(selectedClass);
 
         return (
@@ -156,8 +234,14 @@ export default function VideosPage() {
     });
   }, [videos, search, selectedClass, selectedSubject]);
 
+  // YouTube fallback search.
+  // Only search YouTube after all local videos have been loaded.
   useEffect(() => {
-    if (search.trim().length < 3 || filteredVideos.length > 0) {
+    if (
+      search.trim().length < 3 ||
+      filteredVideos.length > 0 ||
+      hasMore
+    ) {
       setYoutubeResults([]);
       setYoutubeLoading(false);
       setSearchError("");
@@ -172,7 +256,9 @@ export default function VideosPage() {
 
       try {
         const response = await fetch(
-          `/api/videos/search?q=${encodeURIComponent(search.trim())}`
+          `/api/videos/search?q=${encodeURIComponent(
+            search.trim()
+          )}`
         );
 
         const data = await response.json();
@@ -204,7 +290,7 @@ export default function VideosPage() {
       active = false;
       clearTimeout(timeout);
     };
-  }, [search, filteredVideos.length]);
+  }, [search, filteredVideos.length, hasMore]);
 
   function resetFilters() {
     setSearch("");
@@ -227,8 +313,8 @@ export default function VideosPage() {
         : "border-[var(--border)] bg-[var(--card-soft)] text-[var(--muted)] hover:border-red-500/40 hover:text-[var(--foreground)]"
     }`;
 
-  // Show only the loader until the initial video library fetch completes.
-  if (loading) {
+  // Initial loading screen.
+  if (loading && videos.length === 0) {
     return (
       <main className="flex min-h-[70vh] items-center justify-center">
         <LoadingSpinner />
@@ -238,6 +324,7 @@ export default function VideosPage() {
 
   return (
     <div className="w-full min-w-0 space-y-6 pb-24 text-[var(--foreground)] md:space-y-7 md:pb-10">
+
       {/* Page header */}
       <header className="flex flex-col justify-between gap-5 border-b border-[var(--border)] pb-6 sm:flex-row sm:items-end">
         <div className="min-w-0">
@@ -270,7 +357,9 @@ export default function VideosPage() {
               id="video-search"
               type="search"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) =>
+                setSearch(event.target.value)
+              }
               placeholder="Search lessons, chapters, topics, teachers..."
               className="h-12 w-full rounded-xl border border-[var(--border)] bg-[var(--card-soft)] pl-11 pr-11 text-sm font-medium text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-red-500/60 focus:ring-2 focus:ring-red-500/10"
             />
@@ -289,7 +378,9 @@ export default function VideosPage() {
 
           <button
             type="button"
-            onClick={() => setFiltersOpen((previous) => !previous)}
+            onClick={() =>
+              setFiltersOpen((previous) => !previous)
+            }
             aria-expanded={filtersOpen}
             className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card-soft)] px-5 text-sm font-bold text-[var(--foreground)] transition hover:border-red-500/40 md:hidden"
           >
@@ -316,7 +407,10 @@ export default function VideosPage() {
           } mt-5 border-t border-[var(--border)] pt-5 md:block`}
         >
           <div className="mb-3 flex items-center gap-2">
-            <SlidersHorizontal size={15} className="text-red-500" />
+            <SlidersHorizontal
+              size={15}
+              className="text-red-500"
+            />
             <h2 className="text-xs font-black uppercase tracking-[0.16em] text-[var(--muted)]">
               Class / Exam
             </h2>
@@ -337,7 +431,9 @@ export default function VideosPage() {
                   type="button"
                   onClick={() => setSelectedClass(item)}
                   aria-pressed={selectedClass === item}
-                  className={filterButton(selectedClass === item)}
+                  className={filterButton(
+                    selectedClass === item
+                  )}
                 >
                   {label}
                 </button>
@@ -368,14 +464,19 @@ export default function VideosPage() {
                     value={subject}
                     className="bg-[var(--card)] text-[var(--foreground)]"
                   >
-                    {subject === "All" ? "All subjects" : subject}
+                    {subject === "All"
+                      ? "All subjects"
+                      : subject}
                   </option>
                 ))}
               </select>
             </div>
 
             <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
-              <Sparkles size={14} className="text-red-500" />
+              <Sparkles
+                size={14}
+                className="text-red-500"
+              />
               Discover lessons for your studies
             </div>
 
@@ -403,13 +504,17 @@ export default function VideosPage() {
             </p>
 
             <h2 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">
-              {search.trim() ? "Search results" : "Explore lessons"}
+              {search.trim()
+                ? "Search results"
+                : "Explore lessons"}
             </h2>
 
             <p className="mt-1 text-sm text-[var(--muted)]">
-              {`${filteredVideos.length.toLocaleString()} ${
-                filteredVideos.length === 1 ? "lesson" : "lessons"
-              } available`}
+              {filteredVideos.length.toLocaleString()} matching{" "}
+              {filteredVideos.length === 1
+                ? "lesson"
+                : "lessons"}
+              {hasMore ? " loaded so far" : " available"}
             </p>
           </div>
 
@@ -428,7 +533,10 @@ export default function VideosPage() {
         {filteredVideos.length > 0 ? (
           <div className="grid w-full min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {filteredVideos.map((video) => (
-              <VideoCard key={video.id} video={video} />
+              <VideoCard
+                key={video.id}
+                video={video}
+              />
             ))}
           </div>
         ) : youtubeLoading ? (
@@ -451,7 +559,10 @@ export default function VideosPage() {
         ) : youtubeResults.length > 0 ? (
           <>
             <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/[0.06] px-4 py-3">
-              <PlayCircle size={18} className="text-red-500" />
+              <PlayCircle
+                size={18}
+                className="text-red-500"
+              />
               <p className="text-xs font-semibold text-[var(--muted-strong)]">
                 Showing additional results from YouTube
               </p>
@@ -462,7 +573,9 @@ export default function VideosPage() {
                 <button
                   key={video.videoId}
                   type="button"
-                  onClick={() => setSelectedYoutubeVideo(video)}
+                  onClick={() =>
+                    setSelectedYoutubeVideo(video)
+                  }
                   className="group min-w-0 w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] text-left transition duration-200 hover:-translate-y-1 hover:border-red-500/40"
                 >
                   <div className="relative aspect-video overflow-hidden bg-[var(--card-soft)]">
@@ -480,7 +593,10 @@ export default function VideosPage() {
                     </div>
 
                     <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-lg bg-black/75 px-2.5 py-1.5 text-[10px] font-bold text-white backdrop-blur">
-                      <PlayCircle size={12} className="text-red-400" />
+                      <PlayCircle
+                        size={12}
+                        className="text-red-400"
+                      />
                       YouTube
                     </div>
                   </div>
@@ -539,55 +655,216 @@ export default function VideosPage() {
             </button>
           </div>
         )}
+
+        {/* Infinite scroll trigger */}
+        {hasMore && (
+          <div
+            ref={loadMoreRef}
+            className="flex min-h-24 items-center justify-center py-8"
+          >
+            {loadingMore && <LoadingSpinner />}
+          </div>
+        )}
+
+        {/* End of library */}
+        {!hasMore && videos.length > 0 && (
+          <p className="py-8 text-center text-sm text-[var(--muted)]">
+            You've reached the end of the video library.
+          </p>
+        )}
+
+        {/* Retry if a page failed to load */}
+        {!hasMore && videos.length === 0 && !loading && (
+          <button
+            type="button"
+            onClick={() => {
+              setHasMore(true);
+              setLastDocument(null);
+            }}
+            className="mt-5 rounded-xl bg-red-600 px-5 py-3 text-sm font-bold text-white"
+          >
+            Retry loading videos
+          </button>
+        )}
       </section>
 
-      {/* Embedded YouTube player */}
-      {selectedYoutubeVideo && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm sm:p-6"
-          onClick={() => setSelectedYoutubeVideo(null)}
-        >
+
+        {/* Embedded YouTube player */}
+        {selectedYoutubeVideo && (
           <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={selectedYoutubeVideo.title}
-            className="w-full max-w-5xl overflow-hidden rounded-2xl border border-white/10 bg-[var(--card)] shadow-2xl"
-            onClick={(event) => event.stopPropagation()}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-2 backdrop-blur-md sm:p-5"
+            onClick={() => setSelectedYoutubeVideo(null)}
           >
-            <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
-              <div className="min-w-0">
-                <h2 className="line-clamp-1 text-sm font-bold text-[var(--foreground)] sm:text-base">
-                  {selectedYoutubeVideo.title}
-                </h2>
-                <p className="mt-1 text-xs text-[var(--muted)]">
-                  {selectedYoutubeVideo.channelName}
-                </p>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={selectedYoutubeVideo.title}
+              className="flex max-h-[94vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {/* Modal header */}
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3 sm:px-5">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.16em] text-red-500">
+                    Edukrate / Now Playing
+                  </p>
+
+                  <h2 className="mt-1 line-clamp-1 text-sm font-bold text-[var(--foreground)] sm:text-base">
+                    {selectedYoutubeVideo.title}
+                  </h2>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedYoutubeVideo(null)}
+                  aria-label="Close video player"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] transition hover:bg-[var(--card-soft)] hover:text-[var(--foreground)]"
+                >
+                  <X size={18} />
+                </button>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setSelectedYoutubeVideo(null)}
-                aria-label="Close video player"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] transition hover:bg-[var(--card-soft)] hover:text-[var(--foreground)]"
-              >
-                <X size={18} />
-              </button>
-            </div>
+              {/* Scrollable content */}
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="grid min-w-0 grid-cols-1 gap-5 p-3 sm:gap-6 sm:p-5 xl:grid-cols-[minmax(0,1.8fr)_minmax(260px,0.8fr)]">
 
-            <div className="aspect-video w-full bg-black">
-              <iframe
-                key={selectedYoutubeVideo.videoId}
-                src={`https://www.youtube-nocookie.com/embed/${selectedYoutubeVideo.videoId}?autoplay=1&rel=0`}
-                title={selectedYoutubeVideo.title}
-                className="h-full w-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                referrerPolicy="strict-origin-when-cross-origin"
-                allowFullScreen
-              />
+                  {/* Main video details */}
+                  <div className="min-w-0 space-y-5">
+
+                    {/* Player */}
+                    <section className="overflow-hidden rounded-xl border border-[var(--border)] bg-black shadow-sm">
+                      <EdukratePlayer
+                        videoId={selectedYoutubeVideo.videoId}
+                        title={selectedYoutubeVideo.title}
+                        autoplay
+                      />
+                    </section>
+
+                    {/* Video information */}
+                    <section className="space-y-3">
+                      <h1 className="text-lg font-black leading-snug text-[var(--foreground)] sm:text-2xl">
+                        {selectedYoutubeVideo.title}
+                      </h1>
+
+                      <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--muted)]">
+                        <PlayCircle size={16} className="text-red-500" />
+
+                        <span className="font-semibold">
+                          {selectedYoutubeVideo.channelName || "YouTube creator"}
+                        </span>
+
+                        {selectedYoutubeVideo.publishedAt && (
+                          <>
+                            <span>•</span>
+                            <span>
+                              {new Date(
+                                selectedYoutubeVideo.publishedAt
+                              ).toLocaleDateString("en-IN", {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              })}
+                            </span>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <span className="rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-500">
+                          YouTube
+                        </span>
+
+                        <span className="rounded-full border border-[var(--border)] bg-[var(--card-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--muted-strong)]">
+                          Additional search result
+                        </span>
+                      </div>
+                    </section>
+
+                    {/* Description */}
+                    <section className="rounded-2xl border border-[var(--border)] bg-[var(--card-soft)] p-4 sm:p-5">
+                      <h2 className="text-base font-black text-[var(--foreground)]">
+                        Description
+                      </h2>
+
+                      <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-[var(--muted-strong)]">
+                        {selectedYoutubeVideo.description?.trim() ||
+                          "No description is available for this video."}
+                      </p>
+
+                      <a
+                        href={
+                          selectedYoutubeVideo.watchUrl ||
+                          `https://www.youtube.com/watch?v=${selectedYoutubeVideo.videoId}`
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-4 inline-flex items-center gap-2 text-xs font-bold text-red-500 transition hover:text-red-400"
+                      >
+                        Watch on YouTube
+                        <PlayCircle size={14} />
+                      </a>
+                    </section>
+                  </div>
+
+                  {/* Recommendations */}
+                  <aside className="min-w-0 space-y-4">
+                    <div>
+                      <h2 className="text-lg font-black text-[var(--foreground)]">
+                        More videos
+                      </h2>
+
+                      <p className="mt-1 text-xs text-[var(--muted)]">
+                        More results from your search
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                      {youtubeResults
+                        .filter(
+                          (video) =>
+                            video.videoId !== selectedYoutubeVideo.videoId
+                        )
+                        .slice(0, 8)
+                        .map((video) => (
+                          <button
+                            key={video.videoId}
+                            type="button"
+                            onClick={() => setSelectedYoutubeVideo(video)}
+                            className="group flex min-w-0 gap-3 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] p-2 text-left transition hover:border-red-500/50 hover:bg-[var(--card-soft)]"
+                          >
+                            <div className="relative aspect-video w-[42%] shrink-0 overflow-hidden rounded-lg bg-black">
+                              <img
+                                src={video.thumbnailUrl}
+                                alt=""
+                                loading="lazy"
+                                className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                              />
+                            </div>
+
+                            <div className="flex min-w-0 flex-1 flex-col justify-center">
+                              <h3 className="line-clamp-2 text-xs font-bold leading-5 text-[var(--foreground)] transition group-hover:text-red-500">
+                                {video.title}
+                              </h3>
+
+                              <p className="mt-1 line-clamp-1 text-[11px] text-[var(--muted)]">
+                                {video.channelName}
+                              </p>
+                            </div>
+                          </button>
+                        ))}
+                    </div>
+
+                    {youtubeResults.length <= 1 && (
+                      <p className="rounded-xl border border-[var(--border)] bg-[var(--card-soft)] p-4 text-xs text-[var(--muted)]">
+                        No additional search results are available.
+                      </p>
+                    )}
+                  </aside>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
     </div>
   );
 }

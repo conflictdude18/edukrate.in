@@ -1,9 +1,7 @@
+
 import { NextResponse } from "next/server";
-
 import { adminDb } from "@/lib/firebase-admin";
-
 import { getLatestChannelVideos } from "@/lib/youtube";
-
 import { classifyVideo } from "@/lib/channel-classifier";
 
 type VideoChannel = {
@@ -13,6 +11,52 @@ type VideoChannel = {
   approved: boolean;
   active: boolean;
 };
+
+function buildSearchTokens(video: {
+  title?: string;
+  description?: string;
+  channelName?: string;
+  classLevel?: string;
+  subject?: string;
+  chapter?: string;
+  exam?: string;
+  language?: string;
+}): string[] {
+  const text = [
+    video.title,
+    video.description,
+    video.channelName,
+    video.classLevel,
+    video.subject,
+    video.chapter,
+    video.exam,
+    video.language,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const stopWords = new Set([
+    "the", "and", "for", "with", "this", "that",
+    "from", "are", "was", "you", "your", "how",
+    "what", "why", "when", "where", "a", "an",
+    "of", "in", "on", "to", "is", "by", "at",
+  ]);
+
+  return [
+    ...new Set(
+      text
+        .normalize("NFKD")
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .split(/\s+/)
+        .filter(
+          (word) =>
+            word.length >= 2 &&
+            !stopWords.has(word)
+        )
+    ),
+  ].slice(0, 200);
+}
 
 export async function GET() {
   try {
@@ -48,9 +92,7 @@ export async function GET() {
     let failed = 0;
 
     if (eligibleChannels.length === 0) {
-      console.log(
-        "NO APPROVED + ACTIVE CHANNELS FOUND"
-      );
+      console.log("NO APPROVED + ACTIVE CHANNELS FOUND");
 
       return NextResponse.json({
         success: true,
@@ -89,11 +131,10 @@ export async function GET() {
           continue;
         }
 
-        const videos =
-          await getLatestChannelVideos(
-            channel.channelId,
-            15
-          );
+        const videos = await getLatestChannelVideos(
+          channel.channelId,
+          15
+        );
 
         console.log(
           `FOUND ${videos.length} VIDEOS FROM ${channel.title}`
@@ -133,59 +174,44 @@ export async function GET() {
               continue;
             }
 
-            await adminDb
-              .collection("videos")
-              .doc(video.videoId)
-              .set({
-                id: video.videoId,
+            const title = video.title || "";
+            const description = video.description || "";
+            const channelName = channel.title;
 
-                youtubeId: video.videoId,
+            await videoRef.set({
+              id: video.videoId,
+              youtubeId: video.videoId,
+              title,
+              description,
+              thumbnailUrl: video.thumbnail || "",
+              channelName,
+              channelId: channel.channelId,
 
-                title: video.title,
+              classLevel: null,
+              subject: null,
+              chapter: null,
+              exam: null,
+              language: null,
 
-                description:
-                  video.description || "",
+              approved: true,
+              featured: false,
+              classified: true,
+              educational: true,
 
-                thumbnailUrl:
-                  video.thumbnail || "",
+              views: 0,
+              savedCount: 0,
 
-                channelName:
-                  channel.title,
+              publishedAt: new Date(video.publishedAt),
+              createdAt: new Date(),
 
-                channelId:
-                  channel.channelId,
-
-                classLevel: null,
-
-                subject: null,
-
-                chapter: null,
-
-                exam: null,
-
-                language: null,
-
-                approved: true,
-
-                featured: false,
-
-                classified: true,
-
-                educational: true,
-
-                views: 0,
-
-                savedCount: 0,
-
-                publishedAt:
-                  new Date(video.publishedAt),
-
-                createdAt:
-                  new Date(),
-              });
+              searchTokens: buildSearchTokens({
+                title,
+                description,
+                channelName,
+              }),
+            });
 
             imported++;
-
           } catch (videoError) {
             failed++;
 
@@ -221,9 +247,7 @@ export async function GET() {
     console.log(`IMPORTED: ${imported}`);
     console.log(`SKIPPED: ${skipped}`);
     console.log(`FAILED: ${failed}`);
-    console.log(
-      `CHANNELS: ${channels.length}`
-    );
+    console.log(`CHANNELS: ${channels.length}`);
     console.log("=================================");
 
     return NextResponse.json({
@@ -234,10 +258,7 @@ export async function GET() {
       channels: channels.length,
     });
   } catch (error) {
-    console.error(
-      "VIDEO SYNC FATAL ERROR:",
-      error
-    );
+    console.error("VIDEO SYNC FATAL ERROR:", error);
 
     return NextResponse.json(
       {
@@ -247,9 +268,7 @@ export async function GET() {
         failed: 1,
         channels: 0,
       },
-      {
-        status: 500,
-      }
+      { status: 500 }
     );
   }
 }

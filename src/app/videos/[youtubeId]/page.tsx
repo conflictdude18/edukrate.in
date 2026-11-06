@@ -1,7 +1,9 @@
 
 import Link from "next/link";
 import { ArrowLeft, PlayCircle } from "lucide-react";
+
 import { adminDb } from "@/lib/firebase-admin";
+import EdukratePlayer from "@/components/videos/EdukratePlayer";
 
 type Props = {
   params: Promise<{
@@ -29,9 +31,11 @@ export default async function VideoPlayerPage({ params }: Props) {
     return (
       <main className="min-h-screen w-full p-5 text-[var(--foreground)] sm:p-8">
         <h1 className="text-xl font-bold">Invalid video ID</h1>
+
         <p className="mt-2 text-[var(--muted)]">
           This link does not contain a valid YouTube video ID.
         </p>
+
         <Link
           href="/videos"
           className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-red-600 transition hover:opacity-75"
@@ -46,6 +50,7 @@ export default async function VideoPlayerPage({ params }: Props) {
   let video: VideoDetails | null = null;
   let currentDocumentId = "";
 
+  // Fetch video details from Firestore.
   try {
     const directDoc = await adminDb
       .collection("videos")
@@ -64,6 +69,7 @@ export default async function VideoPlayerPage({ params }: Props) {
 
       if (!matchingDocs.empty) {
         const doc = matchingDocs.docs[0];
+
         video = doc.data() as VideoDetails;
         currentDocumentId = doc.id;
       }
@@ -73,11 +79,15 @@ export default async function VideoPlayerPage({ params }: Props) {
   }
 
   const title = video?.title || "Study Video";
+
   const description =
     video?.description?.trim() ||
     "No description is available for this video.";
-  const channelName = video?.channelName || "YouTube creator";
 
+  const channelName =
+    video?.channelName || "YouTube creator";
+
+  // Recommended videos.
   let suggestions: Array<{
     id: string;
     youtubeId: string;
@@ -105,6 +115,7 @@ export default async function VideoPlayerPage({ params }: Props) {
       .filter((doc) => doc.id !== currentDocumentId)
       .map((doc) => {
         const data = doc.data() as VideoDetails;
+
         const suggestionId = data.youtubeId || doc.id;
 
         const suggestionTerms = new Set(
@@ -117,7 +128,9 @@ export default async function VideoPlayerPage({ params }: Props) {
         let score = 0;
 
         for (const term of currentTerms) {
-          if (suggestionTerms.has(term)) score++;
+          if (suggestionTerms.has(term)) {
+            score++;
+          }
         }
 
         if (
@@ -145,7 +158,9 @@ export default async function VideoPlayerPage({ params }: Props) {
           score,
         };
       })
-      .filter((item) => /^[a-zA-Z0-9_-]{11}$/.test(item.youtubeId))
+      .filter((item) =>
+        /^[a-zA-Z0-9_-]{11}$/.test(item.youtubeId)
+      )
       .sort((a, b) => b.score - a.score)
       .slice(0, 8);
   } catch (error) {
@@ -154,6 +169,8 @@ export default async function VideoPlayerPage({ params }: Props) {
 
   return (
     <main className="mx-auto w-full max-w-[1600px] space-y-6 pb-10 text-[var(--foreground)] sm:space-y-7">
+
+      {/* Back navigation */}
       <Link
         href="/videos"
         className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--muted)] transition hover:text-red-600"
@@ -163,19 +180,16 @@ export default async function VideoPlayerPage({ params }: Props) {
       </Link>
 
       <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.8fr)_minmax(300px,0.8fr)] xl:gap-7">
+
+        {/* Main video section */}
         <div className="min-w-0 space-y-5 sm:space-y-6">
-          {/* YouTube player */}
+
+          {/* Shared Edukrate player */}
           <section className="w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-black shadow-sm">
-            <div className="relative aspect-video w-full">
-              <iframe
-                src={`https://www.youtube-nocookie.com/embed/${youtubeId}?controls=1&rel=0&playsinline=1`}
-                title={title}
-                className="absolute inset-0 h-full w-full border-0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                referrerPolicy="strict-origin-when-cross-origin"
-                allowFullScreen
-              />
-            </div>
+            <EdukratePlayer
+              videoId={youtubeId}
+              title={title}
+            />
           </section>
 
           {/* Video information */}
@@ -188,6 +202,7 @@ export default async function VideoPlayerPage({ params }: Props) {
               {channelName}
             </p>
 
+            {/* Video metadata */}
             <div className="flex flex-wrap gap-2">
               {video?.subject && (
                 <span className="rounded-full border border-[var(--border)] bg-[var(--card-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--muted-strong)]">
@@ -223,11 +238,13 @@ export default async function VideoPlayerPage({ params }: Props) {
 
         {/* Recommendations */}
         <aside className="min-w-0 space-y-4">
+
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-[var(--foreground)]">
                 Recommended videos
               </h2>
+
               <p className="mt-1 text-xs text-[var(--muted)]">
                 More videos to continue learning
               </p>
@@ -241,6 +258,7 @@ export default async function VideoPlayerPage({ params }: Props) {
 
           {suggestions.length > 0 ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-1">
+
               {suggestions.map((item) => (
                 <Link
                   key={item.id}
@@ -268,6 +286,7 @@ export default async function VideoPlayerPage({ params }: Props) {
                   </div>
                 </Link>
               ))}
+
             </div>
           ) : (
             <p className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-sm text-[var(--muted)]">

@@ -88,6 +88,52 @@ function getThumbnail(item: YouTubeVideoItem): string {
   );
 }
 
+function buildSearchTokens(video: {
+  title?: string;
+  description?: string;
+  channelName?: string;
+  classLevel?: string;
+  subject?: string;
+  chapter?: string;
+  exam?: string;
+  language?: string;
+}): string[] {
+  const text = [
+    video.title,
+    video.description,
+    video.channelName,
+    video.classLevel,
+    video.subject,
+    video.chapter,
+    video.exam,
+    video.language,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const stopWords = new Set([
+    "the", "and", "for", "with", "this", "that",
+    "from", "are", "was", "you", "your", "how",
+    "what", "why", "when", "where", "a", "an",
+    "of", "in", "on", "to", "is", "by", "at",
+  ]);
+
+  return [
+    ...new Set(
+      text
+        .normalize("NFKD")
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .split(/\s+/)
+        .filter(
+          (word) =>
+            word.length >= 2 &&
+            !stopWords.has(word)
+        )
+    ),
+  ].slice(0, 200);
+}
+
 async function searchYouTube(
   query: string,
   apiKey: string,
@@ -262,6 +308,14 @@ export const importEducationalVideos = onSchedule(
 
         views: Number(video.statistics?.viewCount ?? 0),
         savedCount: 0,
+
+        searchTokens: buildSearchTokens({
+          title: video.snippet.title,
+          description: video.snippet.description ?? "",
+          channelName: video.snippet.channelTitle,
+          classLevel: category.classLevel,
+          exam: category.exam ?? "",
+        }),
       });
 
       imported++;
