@@ -1,4 +1,3 @@
-
 "use client";
 
 import { ReactNode } from "react";
@@ -18,10 +17,14 @@ export default function LayoutClient({ children }: Props) {
   const isNotique =
     pathname === "/notique" || pathname.startsWith("/notique/");
 
+  const isHome = pathname === "/";
+
   if (!user) {
     return (
       <div className="min-h-screen w-full overflow-x-hidden bg-[var(--background)] text-[var(--foreground)]">
         {children}
+
+        {isHome && !isNotique && <Footer />}
       </div>
     );
   }
