@@ -1,16 +1,27 @@
+
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
-  apiKey: "process.env.AIzaSyB1rA7XEtvC97hsos0fCz6NcNAiZITY1Vc",
-  authDomain: "noteswallah-84dc5.firebaseapp.com",
-  projectId: "noteswallah-84dc5",
-  storageBucket: "noteswallah-84dc5.firebasestorage.app",
-  messagingSenderId: "821680721378",
-  appId: "1:821680721378:web:57bd2192eb838433537dbb",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
+
+const missingVariables = Object.entries(firebaseConfig)
+  .filter(([, value]) => !value)
+  .map(([key]) => key);
+
+if (missingVariables.length > 0) {
+  throw new Error(
+    `Missing Firebase environment variables: ${missingVariables.join(", ")}`
+  );
+}
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
