@@ -27,12 +27,21 @@ const siteDescription =
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
+
   applicationName: "Edukrate",
+
+  // Google AdSense verification
+  other: {
+    "google-adsense-account": "ca-pub-9129121205041534",
+  },
+
   title: {
     default: siteTitle,
     template: "%s | Edukrate",
   },
+
   description: siteDescription,
+
   keywords: [
     "Edukrate",
     "study notes",
@@ -45,14 +54,17 @@ export const metadata: Metadata = {
     "notes sharing platform",
     "class notes",
   ],
+
   authors: [{ name: "Edukrate", url: siteUrl }],
   creator: "Edukrate",
   publisher: "Edukrate",
+
   icons: {
     icon: "/edukratelogo.png",
     shortcut: "/edukratelogo.png",
     apple: "/edukratelogo.png",
   },
+
   robots: {
     index: true,
     follow: true,
@@ -64,6 +76,7 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
+
   openGraph: {
     title: siteTitle,
     description: siteDescription,
@@ -80,15 +93,18 @@ export const metadata: Metadata = {
     locale: "en_IN",
     type: "website",
   },
+
   twitter: {
     card: "summary_large_image",
     title: siteTitle,
     description: siteDescription,
     images: ["/og-image.png"],
   },
+
   alternates: {
     canonical: siteUrl,
   },
+
   category: "education",
 };
 
@@ -118,7 +134,7 @@ export default function RootLayout({
         <Script
           id="google-adsense"
           async
-          strategy="afterInteractive"
+          strategy="beforeInteractive"
           src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9129121205041534"
           crossOrigin="anonymous"
         />
