@@ -3,9 +3,9 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { Toaster } from "sonner";
+import Script from "next/script";
 
 import "./globals.css";
-
 import { AuthProvider } from "@/contexts/AuthContext";
 import LayoutClient from "@/components/LayoutClient";
 
@@ -27,16 +27,12 @@ const siteDescription =
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-
   applicationName: "Edukrate",
-
   title: {
     default: siteTitle,
     template: "%s | Edukrate",
   },
-
   description: siteDescription,
-
   keywords: [
     "Edukrate",
     "study notes",
@@ -49,17 +45,14 @@ export const metadata: Metadata = {
     "notes sharing platform",
     "class notes",
   ],
-
   authors: [{ name: "Edukrate", url: siteUrl }],
   creator: "Edukrate",
   publisher: "Edukrate",
-
   icons: {
     icon: "/edukratelogo.png",
     shortcut: "/edukratelogo.png",
     apple: "/edukratelogo.png",
   },
-
   robots: {
     index: true,
     follow: true,
@@ -71,7 +64,6 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
-
   openGraph: {
     title: siteTitle,
     description: siteDescription,
@@ -88,18 +80,15 @@ export const metadata: Metadata = {
     locale: "en_IN",
     type: "website",
   },
-
   twitter: {
     card: "summary_large_image",
     title: siteTitle,
     description: siteDescription,
     images: ["/og-image.png"],
   },
-
   alternates: {
     canonical: siteUrl,
   },
-
   category: "education",
 };
 
@@ -124,6 +113,16 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} antialiased`}
     >
       <body className="min-h-screen overflow-x-hidden bg-[var(--background)] text-[var(--foreground)]">
+
+        {/* Google AdSense */}
+        <Script
+          id="google-adsense"
+          async
+          strategy="afterInteractive"
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9129121205041534"
+          crossOrigin="anonymous"
+        />
+
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
