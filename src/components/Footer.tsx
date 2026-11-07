@@ -83,61 +83,6 @@ export default function Footer() {
         </p>
 
         {/* Compact navigation */}
-        <div className="mt-6 grid w-full grid-cols-3 gap-3 border-t border-[var(--border)] py-5 text-left">
-
-          <div>
-            <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--foreground)]">
-              Explore
-            </h3>
-            <div className="mt-3 flex flex-col gap-2.5 text-xs text-[var(--muted)]">
-              <FooterLink href="/">Home</FooterLink>
-              <FooterLink href="/browse">Browse Notes</FooterLink>
-              <FooterLink href="/videos">Video Library</FooterLink>
-              <FooterLink href="/creators">Creators</FooterLink>
-              <FooterLink href="/feedback">Feedback</FooterLink>
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--foreground)]">
-              Students
-            </h3>
-            <div className="mt-3 flex flex-col gap-2.5 text-xs text-[var(--muted)]">
-              <FooterLink href="/saved-notes">Saved Notes</FooterLink>
-              <FooterLink href="/following">Following Feed</FooterLink>
-              <FooterLink href="/dashboard">Dashboard</FooterLink>
-              <FooterLink href="/profile">Profile</FooterLink>
-              <FooterLink href="/hall-of-fame">Hall of Fame</FooterLink>
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-[11px] font-bold uppercase tracking-wider text-[var(--foreground)]">
-              Connect
-            </h3>
-            <div className="mt-3 flex flex-col gap-3 text-xs text-[var(--muted)]">
-              <ExternalFooterLink href="https://instagram.com/edukrate.in">
-                <Camera size={14} />
-                Instagram
-              </ExternalFooterLink>
-
-              <ExternalFooterLink href="mailto:support@edukrate.in">
-                <Mail size={14} />
-                Support
-              </ExternalFooterLink>
-
-              <a
-                href="https://edukrate.in"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1"
-              >
-                Website <ArrowUpRight size={12} />
-              </a>
-            </div>
-          </div>
-        </div>
-
         {/* Mobile credits */}
         <div className="flex w-full flex-col items-center gap-2.5 border-t border-[var(--border)] pt-5">
 
@@ -166,7 +111,7 @@ export default function Footer() {
       </div>
 
       {/* ================= ORIGINAL DESKTOP FOOTER ================= */}
-      <div className="relative mx-auto hidden w-full max-w-7xl px-5 py-10 pb-28 sm:px-8 lg:block lg:px-12 lg:py-14 lg:pb-10">
+      <div className="relative hidden w-full px-5 py-10 pb-28 sm:px-8 lg:block lg:px-10 lg:py-14 lg:pb-10">
 
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.5fr_0.8fr_0.8fr_1fr]">
 
