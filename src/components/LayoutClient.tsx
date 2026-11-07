@@ -1,7 +1,8 @@
+
 "use client";
 
 import { ReactNode } from "react";
-
+import { usePathname } from "next/navigation";
 import AppShell from "@/components/AppShell";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,26 +13,26 @@ type Props = {
 
 export default function LayoutClient({ children }: Props) {
   const { user } = useAuth();
+  const pathname = usePathname();
+
+  const isNotique =
+    pathname === "/notique" || pathname.startsWith("/notique/");
 
   if (!user) {
     return (
-      <div className="min-h-screen overflow-x-hidden bg-[#050505] text-white">
+      <div className="min-h-screen w-full overflow-x-hidden bg-[var(--background)] text-[var(--foreground)]">
         {children}
       </div>
     );
   }
 
   return (
-    <AppShell>
-      <div className="min-h-screen overflow-x-hidden bg-[#050505] text-white">
-        <main className="w-full px-0 pb-24 pt-3 sm:px-5 sm:pb-8 sm:pt-5 lg:px-8">
-          <div className="mx-auto w-full max-w-[1760px]">
-            {children}
-          </div>
-        </main>
-
-        <Footer />
+    <AppShell fullScreen={isNotique}>
+      <div className="w-full min-w-0">
+        {children}
       </div>
+
+      {!isNotique && <Footer />}
     </AppShell>
   );
 }

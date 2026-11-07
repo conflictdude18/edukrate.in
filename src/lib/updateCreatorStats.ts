@@ -141,7 +141,7 @@ export async function updateCreatorStats(userId: string) {
         userData.displayName ||
         userData.name ||
         oldStats.displayName ||
-        "NotesWallah Creator",
+        "Edukrate Creator",
       photoURL:
         userData.avatarUrl ||
         userData.photoURL ||

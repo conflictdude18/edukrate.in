@@ -140,7 +140,7 @@ export default function SettingsPage() {
             </h1>
 
             <p className="mt-1 text-sm text-white/50">
-              Update your NotesWallah profile details.
+              Update your Edukrate profile details.
             </p>
           </div>
         </div>

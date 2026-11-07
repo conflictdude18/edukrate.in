@@ -1,3 +1,4 @@
+
 "use client";
 
 import type React from "react";
@@ -16,6 +17,9 @@ import {
   ShieldCheck,
   UploadCloud,
   X,
+  FileUp,
+  Tag,
+  Info,
 } from "lucide-react";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -65,6 +69,9 @@ function makeKeywords(values: string[]) {
 
   return Array.from(new Set(words));
 }
+
+const inputClass =
+  "h-12 w-full rounded-xl border border-[var(--border)] bg-[var(--card-soft)] px-4 text-sm font-medium text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-red-500/60 focus:ring-2 focus:ring-red-500/10";
 
 export default function UploadPage() {
   const router = useRouter();
@@ -229,7 +236,7 @@ export default function UploadPage() {
         pageCount,
 
         uploaderId: user.uid,
-        uploaderName: user.displayName || user.email || "NotesWallah User",
+        uploaderName: user.displayName || user.email || "Edukrate User",
         uploaderEmail: user.email || "",
         uploaderPhotoURL: user.photoURL || "",
 
@@ -256,7 +263,7 @@ export default function UploadPage() {
         noteTitle: finalTitle,
         noteId: docRef.id,
         uploaderId: user.uid,
-        uploaderName: user.displayName || "NotesWallah User",
+        uploaderName: user.displayName || "Edukrate User",
         read: false,
         createdAt: serverTimestamp(),
       });
@@ -264,7 +271,7 @@ export default function UploadPage() {
       try {
         await sendFollowerUploadNotifications({
           uploaderId: user.uid,
-          uploaderName: user.displayName || user.email || "NotesWallah User",
+          uploaderName: user.displayName || user.email || "Edukrate User",
           noteId: docRef.id,
           noteTitle: finalTitle,
         });
@@ -301,86 +308,103 @@ export default function UploadPage() {
 
   if (loading) {
     return (
-        <div className="flex min-h-[70vh] items-center justify-center text-white">
-          <div className="text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-white/10 bg-white/5">
-              <RefreshCw className="animate-spin text-red-500" size={30} />
-            </div>
-            <h1 className="mt-5 text-xl font-black">Checking account</h1>
-            <p className="mt-2 text-sm text-white/50">
-              Preparing your upload workspace...
-            </p>
+      <div className="flex min-h-[70vh] items-center justify-center text-[var(--foreground)]">
+        <div className="text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+            <RefreshCw className="animate-spin text-red-500" size={28} />
           </div>
+          <h1 className="mt-5 text-xl font-black">Checking account</h1>
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            Preparing your upload workspace...
+          </p>
         </div>
+      </div>
     );
   }
 
   return (
-      <div className="space-y-5 pb-28 text-white md:pb-10">
-        <div className="relative overflow-hidden">
-          <div className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-red-500/20 blur-3xl" />
-
-          <div className="relative grid gap-7 lg:grid-cols-[1fr_360px] lg:items-end">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-4 py-2 text-xs font-black text-red-300">
-                <UploadCloud size={16} />
-                Upload Notes
-              </div>
-
-              <h1 className="mt-5 text-3xl font-black tracking-tight sm:text-5xl lg:text-6xl">
-                Share study material
-              </h1>
-
-              <p className="mt-4 max-w-2xl text-sm leading-6 text-white/55 sm:text-base">
-                Upload clean PDF notes with accurate details so students can
-                discover them through search, filters, and recommendations.
-              </p>
+    <div className="w-full min-w-0 space-y-7 pb-28 text-[var(--foreground)] md:pb-10">
+      {/* Header */}
+      <header className="border-b border-[var(--border)] pb-7">
+        <div className="flex flex-col justify-between gap-6 xl:flex-row xl:items-end">
+          <div className="min-w-0">
+            <div className="inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-500">
+              <UploadCloud size={15} />
+              CONTRIBUTION CENTER
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              <InfoCard icon={<BookOpen size={22} />} label="Organized" />
-              <InfoCard icon={<ShieldCheck size={22} />} label="Moderated" />
-              <InfoCard icon={<Layers size={22} />} label="Searchable" />
-            </div>
-          </div>
-        </div>
+            <h1 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
+              Upload your notes
+            </h1>
 
-        <form
-          onSubmit={handleUpload}
-          className="mt-5 overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.04] shadow-2xl shadow-black/20 backdrop-blur-xl"
-        >
-          <div className="border-b border-white/10 p-5 sm:p-7">
-            <h2 className="text-xl font-black">Note Details</h2>
-            <p className="mt-1 text-sm text-white/45">
-              Fill these fields carefully for better visibility.
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--muted)] sm:text-base">
+              Share useful study material with the Edukrate community.
+              Add accurate details to help other students discover your work.
             </p>
           </div>
 
-          <div className="grid gap-5 p-5 sm:p-7 md:grid-cols-2">
-            <Field label="Note Title" className="md:col-span-2">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3 xl:w-[390px]">
+            <InfoCard
+              icon={<BookOpen size={20} />}
+              label="Organized"
+            />
+            <InfoCard
+              icon={<ShieldCheck size={20} />}
+              label="Reviewed"
+            />
+            <InfoCard
+              icon={<Layers size={20} />}
+              label="Searchable"
+            />
+          </div>
+        </div>
+      </header>
+
+      <form onSubmit={handleUpload} className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_310px]">
+        {/* Main form */}
+        <div className="min-w-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+          <div className="border-b border-[var(--border)] px-5 py-5 sm:px-7">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+                <FileText size={20} />
+              </div>
+              <div>
+                <h2 className="text-lg font-black">Note information</h2>
+                <p className="mt-0.5 text-xs text-[var(--muted)]">
+                  Fields marked with * are required.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-x-5 gap-y-5 p-5 sm:grid-cols-2 sm:p-7">
+            <Field label="Note title *" className="sm:col-span-2">
               <input
+                required
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Example: Electrostatics Full Notes"
-                className="field-input"
+                placeholder="e.g. Electrostatics Complete Notes"
+                className={inputClass}
               />
             </Field>
 
-            <Field label="Subject">
+            <Field label="Subject *">
               <input
+                required
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                placeholder="Physics, Chemistry, Maths..."
-                className="field-input"
+                placeholder="Physics, Chemistry, Mathematics..."
+                className={inputClass}
               />
             </Field>
 
-            <Field label="Class">
+            <Field label="Class / Exam *">
               <input
+                required
                 value={className}
                 onChange={(e) => setClassName(e.target.value)}
                 placeholder="10, 11, 12, JEE, NEET..."
-                className="field-input"
+                className={inputClass}
               />
             </Field>
 
@@ -388,91 +412,105 @@ export default function UploadPage() {
               <select
                 value={board}
                 onChange={(e) => setBoard(e.target.value)}
-                className="field-input"
+                className={inputClass}
               >
                 {boards.map((item) => (
-                  <option key={item} value={item} className="bg-[#050505]">
+                  <option key={item} value={item}>
                     {item}
                   </option>
                 ))}
               </select>
             </Field>
 
-            <Field label="Note Type">
+            <Field label="Note type">
               <select
                 value={noteType}
                 onChange={(e) => setNoteType(e.target.value)}
-                className="field-input"
+                className={inputClass}
               >
                 {noteTypes.map((item) => (
-                  <option key={item} value={item} className="bg-[#050505]">
+                  <option key={item} value={item}>
                     {item}
                   </option>
                 ))}
               </select>
             </Field>
 
-            <Field label="Topic / Chapter" className="md:col-span-2">
+            <Field label="Topic / Chapter *" className="sm:col-span-2">
               <input
+                required
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
-                placeholder="Example: Ray Optics, Electrostatics, Organic Chemistry"
-                className="field-input"
+                placeholder="e.g. Ray Optics, Electrostatics, Organic Chemistry"
+                className={inputClass}
               />
             </Field>
 
-            <Field label="Extra Keywords" className="md:col-span-2">
-              <input
-                value={keywordsInput}
-                onChange={(e) => setKeywordsInput(e.target.value)}
-                placeholder="Separate with commas: derivation, formula, important questions"
-                className="field-input"
-              />
-              <p className="mt-2 text-xs text-white/40">
-                These help students find your notes faster.
+            <Field label="Extra keywords" className="sm:col-span-2">
+              <div className="relative">
+                <Tag
+                  size={16}
+                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[var(--muted)]"
+                />
+                <input
+                  value={keywordsInput}
+                  onChange={(e) => setKeywordsInput(e.target.value)}
+                  placeholder="Derivation, formula, important questions..."
+                  className={`${inputClass} pl-10`}
+                />
+              </div>
+              <p className="mt-2 text-xs text-[var(--muted)]">
+                Separate multiple keywords with commas.
               </p>
             </Field>
 
-            <Field label="Description" className="md:col-span-2">
+            <Field label="Description" className="sm:col-span-2">
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Briefly describe what this PDF contains..."
                 rows={4}
-                className="field-input resize-none"
+                className="w-full resize-y rounded-xl border border-[var(--border)] bg-[var(--card-soft)] px-4 py-3 text-sm font-medium text-[var(--foreground)] outline-none transition placeholder:text-[var(--muted)] focus:border-red-500/60 focus:ring-2 focus:ring-red-500/10"
               />
             </Field>
 
-            <Field label="PDF File" className="md:col-span-2">
-              <div className="rounded-3xl border border-dashed border-white/15 bg-black/30 p-4">
+            {/* PDF upload */}
+            <Field label="PDF document *" className="sm:col-span-2">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-soft)] p-4">
                 {!pdfFile ? (
-                  <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-9 text-center transition hover:border-red-400/40">
-                    <UploadCloud className="mb-3 text-red-300" size={36} />
-                    <span className="text-sm font-black">
-                      Click to select PDF
+                  <label className="flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--border)] px-4 py-10 text-center transition hover:border-red-500/50 hover:bg-red-500/[0.03]">
+                    <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+                      <FileUp size={27} />
+                    </div>
+                    <span className="text-sm font-bold">
+                      Select your PDF file
                     </span>
-                    <span className="mt-1 text-xs text-white/40">
-                      Maximum size: 15 MB
+                    <span className="mt-1 text-xs text-[var(--muted)]">
+                      Click here to browse files
+                    </span>
+                    <span className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-[11px] font-semibold text-[var(--muted)]">
+                      PDF only · Maximum 15 MB
                     </span>
                     <input
                       type="file"
                       accept="application/pdf"
-                      onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
+                      onChange={(e) =>
+                        setPdfFile(e.target.files?.[0] || null)
+                      }
                       className="hidden"
                     />
                   </label>
                 ) : (
-                  <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/20 bg-red-500/[0.04] p-4">
                     <div className="flex min-w-0 items-center gap-3">
-                      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-red-500/15 text-red-200">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
                         <FileText size={22} />
                       </div>
-
                       <div className="min-w-0">
                         <p className="truncate text-sm font-bold">
                           {pdfFile.name}
                         </p>
-                        <p className="text-xs text-white/40">
+                        <p className="mt-1 text-xs text-[var(--muted)]">
                           {(pdfFile.size / (1024 * 1024)).toFixed(2)} MB
                         </p>
                       </div>
@@ -481,9 +519,10 @@ export default function UploadPage() {
                     <button
                       type="button"
                       onClick={() => setPdfFile(null)}
-                      className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/10 bg-black/30 text-white/60 transition hover:border-red-400/40 hover:text-red-200"
+                      aria-label="Remove selected PDF"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] transition hover:border-red-500/40 hover:text-red-500"
                     >
-                      <X size={18} />
+                      <X size={17} />
                     </button>
                   </div>
                 )}
@@ -491,10 +530,11 @@ export default function UploadPage() {
             </Field>
           </div>
 
+          {/* Generated tags */}
           {generatedTags.length > 0 && (
-            <div className="mx-5 mb-5 rounded-3xl border border-white/10 bg-black/25 p-4 sm:mx-7 sm:mb-7">
-              <p className="mb-3 flex items-center gap-2 text-sm font-bold text-white/80">
-                <CheckCircle2 size={17} className="text-red-300" />
+            <div className="mx-5 mb-6 rounded-xl border border-[var(--border)] bg-[var(--card-soft)] p-4 sm:mx-7">
+              <p className="mb-3 flex items-center gap-2 text-sm font-bold">
+                <CheckCircle2 size={17} className="text-red-500" />
                 Auto-generated search tags
               </p>
 
@@ -502,7 +542,7 @@ export default function UploadPage() {
                 {generatedTags.map((tag) => (
                   <span
                     key={tag}
-                    className="rounded-full border border-red-400/20 bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-100"
+                    className="rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-500"
                   >
                     {tag}
                   </span>
@@ -511,34 +551,101 @@ export default function UploadPage() {
             </div>
           )}
 
-          <div className="border-t border-white/10 p-5 sm:p-7">
+          <div className="border-t border-[var(--border)] p-5 sm:px-7 sm:py-6">
             <button
               type="submit"
               disabled={uploading}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-red-600 px-5 py-4 text-sm font-black text-white shadow-xl shadow-red-500/20 transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex h-13 w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-5 text-sm font-black text-white shadow-lg shadow-red-600/15 transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {uploading ? (
-                <RefreshCw size={19} className="animate-spin" />
+                <RefreshCw size={18} className="animate-spin" />
               ) : (
-                <UploadCloud size={19} />
+                <UploadCloud size={18} />
               )}
-              {uploading ? "Uploading..." : "Upload Notes"}
+              {uploading ? "Uploading your notes..." : "Upload notes"}
             </button>
 
-            <p className="mt-4 text-center text-xs leading-5 text-white/40">
-              Uploaded notes will appear publicly only after approval.
+            <p className="mt-3 text-center text-xs text-[var(--muted)]">
+              Your upload will be reviewed before becoming publicly available.
             </p>
           </div>
-        </form>
-      </div>
+        </div>
+
+        {/* Side information */}
+        <aside className="flex flex-col gap-4">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
+            <div className="flex items-center gap-2">
+              <Info size={17} className="text-red-500" />
+              <h3 className="text-sm font-black">Upload guidelines</h3>
+            </div>
+
+            <ul className="mt-4 space-y-4">
+              <Guideline
+                title="Use a clear title"
+                description="Mention the subject and chapter so students can find your notes."
+              />
+              <Guideline
+                title="Choose accurate categories"
+                description="Select the correct class, board, subject, and note type."
+              />
+              <Guideline
+                title="Upload a readable PDF"
+                description="Make sure the document is clear and within the 15 MB limit."
+              />
+              <Guideline
+                title="Add useful keywords"
+                description="Include important topics and concepts covered in your PDF."
+              />
+            </ul>
+          </div>
+
+          <div className="rounded-2xl border border-red-500/20 bg-red-500/[0.04] p-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+              <ShieldCheck size={21} />
+            </div>
+            <h3 className="mt-4 text-sm font-black">Review process</h3>
+            <p className="mt-2 text-xs leading-6 text-[var(--muted)]">
+              Every uploaded note is submitted for approval. Once reviewed
+              and approved, it can become available to the Edukrate
+              community.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5">
+            <p className="text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
+              Supported format
+            </p>
+            <div className="mt-3 flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+                <FileText size={22} />
+              </div>
+              <div>
+                <p className="text-sm font-black">PDF documents</p>
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  Maximum file size: 15 MB
+                </p>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </form>
+    </div>
   );
 }
 
-function InfoCard({ icon, label }: { icon: React.ReactNode; label: string }) {
+function InfoCard({
+  icon,
+  label,
+}: {
+  icon: React.ReactNode;
+  label: string;
+}) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/25 p-4 text-center">
-      <div className="mx-auto mb-2 flex justify-center text-red-300">{icon}</div>
-      <p className="text-xs font-bold text-white/50">{label}</p>
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-2 py-3 text-center">
+      <div className="mb-2 flex justify-center text-red-500">{icon}</div>
+      <p className="text-[11px] font-bold text-[var(--muted)] sm:text-xs">
+        {label}
+      </p>
     </div>
   );
 }
@@ -553,11 +660,34 @@ function Field({
   className?: string;
 }) {
   return (
-    <label className={`block ${className}`}>
-      <span className="mb-2 block text-sm font-bold text-white/80">
+    <label className={`block min-w-0 ${className}`}>
+      <span className="mb-2 block text-sm font-bold text-[var(--foreground)]">
         {label}
       </span>
       {children}
     </label>
+  );
+}
+
+function Guideline({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <li className="flex gap-3">
+      <CheckCircle2
+        size={17}
+        className="mt-0.5 shrink-0 text-red-500"
+      />
+      <div>
+        <p className="text-xs font-bold">{title}</p>
+        <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+          {description}
+        </p>
+      </div>
+    </li>
   );
 }

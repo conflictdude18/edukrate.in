@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { CreatorStats } from "@/types/creator";
@@ -20,6 +21,7 @@ import {
   Award,
   BadgeCheck,
   BookOpen,
+  CalendarDays,
   Download,
   Eye,
   FileText,
@@ -28,19 +30,18 @@ import {
   Heart,
   Loader2,
   RefreshCw,
-  Sparkles,
-  UserRound,
-  CalendarDays,
   ShieldCheck,
+  Sparkles,
   TrendingUp,
   Users,
+  UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
+
 import {
   getCreatorLevelProgress,
   getNextCreatorLevel,
 } from "@/lib/creatorLevels";
-
 import { db } from "@/firebase/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import UserAvatar from "@/components/UserAvatar";
@@ -99,14 +100,13 @@ export default function PublicProfilePage() {
         setLoading(true);
 
         const userSnap = await getDoc(doc(db, "users", id));
-
         const creatorStatsSnap = await getDoc(doc(db, "creatorStats", id));
 
-        if (creatorStatsSnap.exists()) {
-          setCreatorStats(creatorStatsSnap.data() as CreatorStats);
-        } else {
-          setCreatorStats(null);
-        }
+        setCreatorStats(
+          creatorStatsSnap.exists()
+            ? (creatorStatsSnap.data() as CreatorStats)
+            : null
+        );
 
         if (userSnap.exists()) {
           setProfile({
@@ -164,6 +164,9 @@ export default function PublicProfilePage() {
             setIsFollowing(false);
             setFollowDocId("");
           }
+        } else {
+          setIsFollowing(false);
+          setFollowDocId("");
         }
       } catch (err) {
         console.error("PROFILE ERROR:", err);
@@ -196,7 +199,10 @@ export default function PublicProfilePage() {
 
     notes.forEach((note) => {
       if (!note.subject) return;
-      subjectMap.set(note.subject, (subjectMap.get(note.subject) || 0) + 1);
+      subjectMap.set(
+        note.subject,
+        (subjectMap.get(note.subject) || 0) + 1
+      );
     });
 
     return Array.from(subjectMap.entries())
@@ -204,24 +210,32 @@ export default function PublicProfilePage() {
       .slice(0, 5);
   }, [notes]);
 
-  const topNotes = useMemo(() => {
-    return [...notes]
-      .sort((a, b) => getCreatorScore(b) - getCreatorScore(a))
-      .slice(0, 3);
-  }, [notes]);
+  const topNotes = useMemo(
+    () =>
+      [...notes]
+        .sort((a, b) => getCreatorScore(b) - getCreatorScore(a))
+        .slice(0, 3),
+    [notes]
+  );
 
-  const latestNotes = useMemo(() => {
-    return [...notes]
-      .sort((a, b) => getCreatedTime(b.createdAt) - getCreatedTime(a.createdAt))
-      .slice(0, 6);
-  }, [notes]);
+  const latestNotes = useMemo(
+    () =>
+      [...notes]
+        .sort(
+          (a, b) =>
+            getCreatedTime(b.createdAt) - getCreatedTime(a.createdAt)
+        )
+        .slice(0, 6),
+    [notes]
+  );
 
   const bestNote = topNotes[0];
+
   const currentCreatorLevel = creatorStats?.creatorLevel || {
-  level: 1,
-  title: "Starter",
-  minApprovedUploads: 1,
-};
+    level: 1,
+    title: "Starter",
+    minApprovedUploads: 1,
+  };
 
   const nextCreatorLevel = getNextCreatorLevel(
     creatorStats?.approvedUploads || 0
@@ -232,7 +246,7 @@ export default function PublicProfilePage() {
   );
 
   const unlockedBadges =
-  creatorStats?.badges?.filter((badge) => badge.unlocked) || [];
+    creatorStats?.badges?.filter((badge) => badge.unlocked) || [];
 
   const creatorScore = creatorStats
     ? creatorStats.approvedUploads * 10 +
@@ -248,7 +262,10 @@ export default function PublicProfilePage() {
       return;
     }
 
-    if (!id || user.uid === id) return;
+    if (!id || user.uid === id || !profile) return;
+
+    const displayName =
+      profile.displayName || profile.name || "Edukrate User";
 
     try {
       setFollowLoading(true);
@@ -263,7 +280,7 @@ export default function PublicProfilePage() {
       } else {
         const newFollow = await addDoc(collection(db, "follows"), {
           followerId: user.uid,
-          followerName: user.displayName || user.email || "NotesWallah User",
+          followerName: user.displayName || user.email || "Edukrate User",
           followerAvatar: user.photoURL || "",
           followingId: id,
           followingName: displayName,
@@ -295,16 +312,14 @@ export default function PublicProfilePage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#050505] px-4 py-8 text-white">
-        <div className="mx-auto flex min-h-[70vh] max-w-6xl items-center justify-center">
+      <main className="min-h-screen w-full bg-[var(--background)] px-3 py-8 text-[var(--foreground)] sm:px-5">
+        <div className="flex min-h-[65vh] items-center justify-center">
           <div className="text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-white/10 bg-white/5">
-              <RefreshCw className="animate-spin text-red-500" size={30} />
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+              <RefreshCw className="animate-spin text-[var(--primary)]" size={28} />
             </div>
-
             <h1 className="mt-5 text-xl font-black">Loading profile</h1>
-
-            <p className="mt-2 text-sm text-white/50">
+            <p className="mt-2 text-sm text-[var(--muted)]">
               Fetching profile and creator stats...
             </p>
           </div>
@@ -315,414 +330,412 @@ export default function PublicProfilePage() {
 
   if (!profile) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#050505] px-4 text-white">
-        <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-8 text-center">
-          <UserRound size={42} className="mx-auto text-red-400" />
+      <main className="flex min-h-screen w-full items-center justify-center bg-[var(--background)] px-4 text-[var(--foreground)]">
+        <div className="w-full max-w-md rounded-3xl border border-[var(--border)] bg-[var(--card)] p-10 text-center">
+          <UserRound size={44} className="mx-auto text-[var(--primary)]" />
           <h1 className="mt-5 text-3xl font-black">User not found</h1>
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            This profile may no longer be available.
+          </p>
+          <button
+            onClick={() => router.back()}
+            className="btn-primary mt-6"
+          >
+            Go back
+          </button>
         </div>
       </main>
     );
   }
-  const memberSince = getJoinedDate(profile.createdAt);
+
   const displayName =
-    profile?.displayName || profile?.name || "NotesWallah User";
+    profile.displayName || profile.name || "Edukrate User";
 
   const avatarUrl =
-    profile?.avatarUrl ||
-    profile?.photoURL ||
-    profile?.profileImage ||
-    profile?.profileImageUrl ||
-    profile?.imageUrl ||
+    profile.avatarUrl ||
+    profile.photoURL ||
+    profile.profileImage ||
+    profile.profileImageUrl ||
+    profile.imageUrl ||
     "";
 
+  const memberSince = getJoinedDate(profile.createdAt);
+
   const trustLabel =
-  creatorScore >= 10000
-    ? "Elite Creator"
-    : creatorScore >= 5000
-      ? "Trusted Creator"
-      : creatorScore >= 1000
-        ? "Rising Creator"
-        : "New Creator";
+    creatorScore >= 10000
+      ? "Elite Creator"
+      : creatorScore >= 5000
+        ? "Trusted Creator"
+        : creatorScore >= 1000
+          ? "Rising Creator"
+          : "New Creator";
 
-        const featuredNotes = [...notes]
-        .sort(
-          (a, b) =>
-            ((b.downloads || 0) * 3 +
-              (b.likes || 0) * 2 +
-              (b.views || 0)) -
-            ((a.downloads || 0) * 3 +
-              (a.likes || 0) * 2 +
-              (a.views || 0))
-        )
-        .slice(0, 3);
+  const creatorBadges: string[] = [];
 
-        const creatorBadges = [];
+  if (notes.length >= 10) creatorBadges.push("📚 Contributor");
+  if (notes.length >= 50) creatorBadges.push("🏆 Top Creator");
+  if (followersCount >= 25) creatorBadges.push("❤️ Community Favourite");
+  if (followersCount >= 100) creatorBadges.push("🔥 Influencer");
+  if (creatorScore >= 5000) creatorBadges.push("⭐ Elite Creator");
+  if (profile.verified) creatorBadges.push("✅ Verified");
 
-  if (notes.length >= 10)
-    creatorBadges.push("📚 Contributor");
-
-  if (notes.length >= 50)
-    creatorBadges.push("🏆 Top Creator");
-
-  if (followersCount >= 25)
-    creatorBadges.push("❤️ Community Favourite");
-
-  if (followersCount >= 100)
-    creatorBadges.push("🔥 Influencer");
-
-  if (creatorScore >= 5000)
-    creatorBadges.push("⭐ Elite Creator");
-
-  if (profile?.verified)
-    creatorBadges.push("✅ Verified");
+  const profileCompletion = Math.min(
+    100,
+    Math.max(0, creatorStats?.profileCompletion || 0)
+  );
 
   return (
-    <div className="space-y-5 pb-28 text-white md:pb-10">
-        <section className="overflow-hidden rounded-[2.2rem] border border-white/10 bg-[#0d0d0d] shadow-2xl shadow-black/30">
-      <div className="relative min-h-[220px] border-b border-white/10 bg-gradient-to-br from-red-700/45 via-red-500/10 to-zinc-950 px-5 py-6 sm:px-7 lg:px-8">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_35%)]" />
-        <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-[#0d0d0d] to-transparent" />
+    <main className="min-h-screen w-full min-w-0 bg-[var(--background)] px-2 pb-24 pt-3 text-[var(--foreground)] sm:px-4 sm:pt-5 lg:px-5">
+      <div className="mx-auto w-full max-w-[1800px] space-y-5">
+        {/* Profile hero */}
+        <section className="overflow-hidden rounded-[1.8rem] border border-[var(--border)] bg-[var(--panel)] shadow-xl">
+          <div className="relative min-h-[230px] overflow-hidden border-b border-[var(--border)] bg-gradient-to-br from-red-700/40 via-red-500/10 to-[var(--panel)] px-5 py-7 sm:px-8 lg:px-10">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.15),transparent_38%)]" />
+            <div className="absolute bottom-0 left-0 right-0 h-28 bg-gradient-to-t from-[var(--panel)] to-transparent" />
 
-        <div className="relative flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-          <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-end">
-            <div className="w-fit rounded-[1.9rem] border-4 border-[#0d0d0d] bg-[#050505] shadow-2xl">
-              <UserAvatar name={displayName} src={avatarUrl} size="lg" />
+            <div className="relative flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+              <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-end">
+                <div className="w-fit rounded-[1.8rem] border-4 border-[var(--panel)] bg-[var(--background)] shadow-2xl">
+                  <UserAvatar name={displayName} src={avatarUrl} size="lg" />
+                </div>
+
+                <div className="min-w-0 pb-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="break-words text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
+                      {displayName}
+                    </h1>
+
+                    {profile.verified && (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-xs font-bold text-blue-500">
+                        <BadgeCheck size={14} />
+                        Verified
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-500">
+                      <Award size={14} />
+                      {trustLabel}
+                    </span>
+
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1.5 text-xs font-bold text-yellow-600">
+                      <Sparkles size={14} />
+                      Level {currentCreatorLevel.level} · {currentCreatorLevel.title}
+                    </span>
+
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-bold text-[var(--muted-strong)]">
+                      <GraduationCap size={14} />
+                      {profile.occupation || "Student Creator"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {user?.uid !== id && (
+                <button
+                  onClick={handleFollow}
+                  disabled={followLoading}
+                  className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-60 md:w-auto ${
+                    isFollowing ? "btn-secondary" : "btn-primary"
+                  }`}
+                >
+                  {followLoading && (
+                    <Loader2 size={16} className="animate-spin" />
+                  )}
+                  {followLoading
+                    ? "Please wait..."
+                    : isFollowing
+                      ? "Following"
+                      : "Follow Creator"}
+                </button>
+              )}
             </div>
+          </div>
 
-            <div className="min-w-0 pb-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="break-words text-3xl font-black sm:text-4xl lg:text-5xl">
-                  {displayName}
-                </h1>
+          <div className="p-4 sm:p-6 lg:p-8">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_350px]">
+              <div className="min-w-0">
+                <SectionLabel>About the creator</SectionLabel>
+                <p className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 text-sm leading-7 text-[var(--muted-strong)] sm:p-5">
+                  {profile.bio || "This creator has not added a bio yet."}
+                </p>
 
-                {profile.verified && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-3 py-1 text-xs font-bold text-blue-300 ring-1 ring-blue-400/20">
-                    <BadgeCheck size={14} />
-                    Verified
-                  </span>
+                {topSubjects.length > 0 && (
+                  <div className="mt-4">
+                    <SectionLabel>Top subjects</SectionLabel>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {topSubjects.map(([subject, count]) => (
+                        <span
+                          key={subject}
+                          className="rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-500"
+                        >
+                          {subject} · {count} uploads
+                        </span>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                <span className="inline-flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-xs font-bold text-red-100">
-                  <Award size={14} />
-                  {trustLabel}
-                </span>
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5">
+                <SectionLabel>Creator identity</SectionLabel>
 
-                <span className="inline-flex items-center gap-1 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-xs font-bold text-yellow-200">
-                  <Sparkles size={14} />
-                  Level {currentCreatorLevel.level} · {currentCreatorLevel.title}
-                </span>
-
-                <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs font-bold text-white/65">
-                  <GraduationCap size={14} />
-                  {profile.occupation || "Student Creator"}
-                </span>
+                <div className="mt-4 space-y-4">
+                  <IdentityRow
+                    icon={<ShieldCheck size={17} />}
+                    label="Status"
+                    value={trustLabel}
+                  />
+                  <IdentityRow
+                    icon={<TrendingUp size={17} />}
+                    label="Creator score"
+                    value={String(formatNumber(creatorScore))}
+                  />
+                  <IdentityRow
+                    icon={<CalendarDays size={17} />}
+                    label="Joined"
+                    value={memberSince}
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
-          {user?.uid !== id && (
-            <button
-              onClick={handleFollow}
-              disabled={followLoading}
-              className={`w-full justify-center md:w-auto ${
-                isFollowing ? "btn-secondary" : "btn-primary"
-              }`}
-            >
-              {followLoading && <Loader2 size={16} className="animate-spin" />}
-              {followLoading ? "Please wait..." : isFollowing ? "Following" : "Follow Creator"}
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="p-4 sm:p-6 lg:p-8">
-        <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
-          <div>
-            <p className="rounded-[1.5rem] border border-white/10 bg-black/25 p-4 text-sm leading-7 text-white/65">
-              {profile.bio || "This creator has not added a bio yet."}
-            </p>
-
-            {topSubjects.length > 0 && (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {topSubjects.map(([subject, count]) => (
-                  <span
-                    key={subject}
-                    className="rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-xs font-bold text-red-200"
-                  >
-                    {subject} · {count}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-[1.5rem] border border-white/10 bg-black/25 p-4">
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-red-300">
-              Creator Identity
-            </p>
-
-            <div className="mt-4 space-y-3 text-sm font-semibold text-white/60">
-              <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-2">
-                  <ShieldCheck size={16} />
-                  Status
-                </span>
-                <span className="font-black text-white">{trustLabel}</span>
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-2">
-                  <TrendingUp size={16} />
-                  Score
-                </span>
-                <span className="font-black text-white">
-                  {Number.isFinite(creatorScore) ? creatorScore : 0}
-                </span>
-              </div>
-
-              <div className="flex items-center justify-between gap-3">
-                <span className="flex items-center gap-2">
-                  <CalendarDays size={16} />
-                  Joined
-                </span>
-                <span className="font-black text-white">{memberSince}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-5 grid grid-cols-2 gap-3 md:mt-8 md:grid-cols-6 md:gap-4">
-          <StatCard icon={<BookOpen size={22} />} value={notes.length} label="Notes" />
-          <StatCard icon={<Users size={22} />} value={followersCount} label="Followers" />
-          <StatCard icon={<Download size={22} />} value={totalDownloads} label="Downloads" />
-          <StatCard icon={<Heart size={22} />} value={totalLikes} label="Likes" />
-          <StatCard icon={<Eye size={22} />} value={totalViews} label="Views" />
-          <StatCard icon={<Flame size={22} />} value={creatorStats?.bestUploadStreak || 0} label="Best Streak" />
-        </div>
-
-        <div className="mt-6 rounded-[1.6rem] border border-white/10 bg-black/25 p-5">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-red-300">
-                Creator Progress
-              </p>
-
-              <h3 className="mt-1 text-lg font-black text-white">
-                Level {currentCreatorLevel.level} · {currentCreatorLevel.title}
-              </h3>
+            {/* Main stats */}
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+              <StatCard
+                icon={<BookOpen size={21} />}
+                value={notes.length}
+                label="Notes"
+              />
+              <StatCard
+                icon={<Users size={21} />}
+                value={followersCount}
+                label="Followers"
+              />
+              <StatCard
+                icon={<Download size={21} />}
+                value={totalDownloads}
+                label="Downloads"
+              />
+              <StatCard
+                icon={<Heart size={21} />}
+                value={totalLikes}
+                label="Likes"
+              />
+              <StatCard
+                icon={<Eye size={21} />}
+                value={totalViews}
+                label="Views"
+              />
+              <StatCard
+                icon={<Flame size={21} />}
+                value={creatorStats?.bestUploadStreak || 0}
+                label="Best streak"
+              />
             </div>
 
-            <span className="rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-sm font-black text-red-200">
-              {Math.round(levelProgress)}%
-            </span>
+            {/* Social links */}
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Link
+                href={`/profile/${id}/followers`}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-5 py-3 text-sm font-bold text-[var(--foreground)] transition hover:border-red-500/40 hover:bg-[var(--surface-hover)]"
+              >
+                <Users size={16} />
+                View followers
+                <span className="text-[var(--muted)]">({followersCount})</span>
+              </Link>
+
+              <Link
+                href={`/profile/${id}/following`}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-5 py-3 text-sm font-bold text-[var(--foreground)] transition hover:border-red-500/40 hover:bg-[var(--surface-hover)]"
+              >
+                <Users size={16} />
+                View following
+                <span className="text-[var(--muted)]">({followingCount})</span>
+              </Link>
+            </div>
           </div>
+        </section>
 
-          <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/10">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-red-600 to-red-400 transition-all duration-700"
-              style={{
-                width: `${Math.min(100, Math.max(0, levelProgress))}%`,
-              }}
-            />
-          </div>
-
-          <div className="mt-3 flex items-center justify-between text-sm">
-            <span className="text-white/50">
-              Current Score:
-              <span className="ml-2 font-black text-white">
-                {Number.isFinite(creatorScore) ? creatorScore : 0}
-              </span>
-            </span>
-
-            {nextCreatorLevel && (
-              <span className="text-white/50">
-                Next:
-                <span className="ml-2 font-black text-red-300">
-                  {nextCreatorLevel.title}
-                </span>
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-5 rounded-[1.6rem] border border-white/10 bg-black/25 p-5">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-red-300">
-            Achievements
-          </p>
-
-          <div className="mt-4 flex flex-wrap gap-3">
-            {creatorBadges.length > 0 ? (
-              creatorBadges.map((badge) => (
-                <span
-                  key={badge}
-                  className="rounded-full border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-100"
-                >
-                  {badge}
-                </span>
-              ))
-            ) : (
-              <span className="text-sm text-white/50">
-                Upload more notes to unlock achievements.
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-3 md:flex md:flex-wrap">
-          <Link
-            href={`/profile/${id}/followers`}
-            className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-center text-sm font-black text-white/75 transition hover:border-red-500/30 hover:bg-white/[0.05]"
+        {/* Creator progress and achievements */}
+        <section className="grid gap-5 xl:grid-cols-2">
+          <CreatorPanel
+            title="Creator progress"
+            subtitle="Progress through creator levels"
+            icon={<Sparkles size={16} />}
           >
-            View followers
-          </Link>
-
-          <Link
-            href={`/profile/${id}/following`}
-            className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-center text-sm font-black text-white/75 transition hover:border-red-500/30 hover:bg-white/[0.05]"
-          >
-            View following
-          </Link>
-        </div>
-      </div>
-    </section>
-
-        <section className="mt-5 grid gap-5 lg:grid-cols-[1fr_360px]">
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-none sm:p-6">
-            <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-red-300">
-              <Award size={15} />
-              Creator Badges
-            </p>
-
-            <h2 className="mt-2 text-xl font-black">Achievements</h2>
-
-            {unlockedBadges.length > 0 ? (
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                {unlockedBadges.map((badge) => (
-                  <div
-                    key={badge.id}
-                    className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="grid h-10 w-10 place-items-center rounded-xl bg-red-600 text-white">
-                        <Award size={19} />
-                      </div>
-
-                      <div>
-                        <h3 className="text-sm font-black">{badge.title}</h3>
-                        <p className="mt-1 text-xs leading-5 text-white/50">
-                          {badge.description}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <EmptyBox text="No creator badges unlocked yet." />
-            )}
-          </div>
-
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-none sm:p-6">
-            <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-red-300">
-              <Sparkles size={15} />
-              Creator Progress
-            </p>
-
-            <div className="mt-5 rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-4">
-              <div className="flex items-center justify-between gap-3">
+            <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/5 p-4 sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-yellow-300">
-                    Creator Level
+                  <p className="text-xs font-black uppercase tracking-wider text-yellow-600">
+                    Current creator level
                   </p>
                   <h3 className="mt-1 text-xl font-black">
                     Level {currentCreatorLevel.level} · {currentCreatorLevel.title}
                   </h3>
                 </div>
 
-                <div className="rounded-2xl bg-yellow-500/15 px-4 py-2 text-sm font-black text-yellow-300">
+                <span className="rounded-xl bg-yellow-500/10 px-4 py-2 text-sm font-black text-yellow-600">
                   {creatorStats?.approvedUploads || 0} uploads
-                </div>
+                </span>
               </div>
 
-              <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/10">
+              <div className="mt-5 h-3 overflow-hidden rounded-full bg-[var(--card-soft)]">
                 <div
-                  className="h-full rounded-full bg-yellow-400"
-                  style={{ width: `${levelProgress}%` }}
+                  className="h-full rounded-full bg-gradient-to-r from-yellow-600 to-yellow-400 transition-all duration-700"
+                  style={{
+                    width: `${Math.min(100, Math.max(0, levelProgress))}%`,
+                  }}
                 />
               </div>
 
-              <p className="mt-3 text-xs font-semibold text-white/45">
-                {nextCreatorLevel
-                  ? `Next: Level ${nextCreatorLevel.level} · ${nextCreatorLevel.title} at ${nextCreatorLevel.minApprovedUploads} approved uploads.`
-                  : "Maximum creator level reached."}
+              <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+                <span className="font-bold text-[var(--muted)]">
+                  {Math.round(levelProgress)}% complete
+                </span>
+                <span className="font-bold text-[var(--muted)]">
+                  {nextCreatorLevel
+                    ? `Next: ${nextCreatorLevel.title}`
+                    : "Maximum level"}
+                </span>
+              </div>
+
+              {nextCreatorLevel && (
+                <p className="mt-3 text-xs leading-5 text-[var(--muted)]">
+                  {nextCreatorLevel.minApprovedUploads} approved uploads
+                  required for the next level.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <MiniCreatorStat
+                label="Creator score"
+                value={creatorScore}
+              />
+              <MiniCreatorStat
+                label="Upload streak"
+                value={creatorStats?.uploadStreak || 0}
+              />
+            </div>
+          </CreatorPanel>
+
+          <CreatorPanel
+            title="Achievements"
+            subtitle="Milestones earned by this creator"
+            icon={<Award size={16} />}
+          >
+            {creatorBadges.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {creatorBadges.map((badge) => (
+                  <span
+                    key={badge}
+                    className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-sm font-bold text-red-500"
+                  >
+                    {badge}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <EmptyBox text="Upload notes and build a community to unlock creator achievements." />
+            )}
+
+            <div className="mt-5 border-t border-[var(--border)] pt-5">
+              <SectionLabel>Unlocked creator badges</SectionLabel>
+
+              {unlockedBadges.length > 0 ? (
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {unlockedBadges.map((badge) => (
+                    <div
+                      key={badge.id}
+                      className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+                          <Award size={20} />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-black">
+                            {badge.title}
+                          </h3>
+                          <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
+                            {badge.description}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-3">
+                  <EmptyBox text="No additional creator badges unlocked yet." />
+                </div>
+              )}
+            </div>
+          </CreatorPanel>
+        </section>
+
+        {/* Profile strength */}
+        <section className="rounded-3xl border border-[var(--border)] bg-[var(--panel)] p-5 sm:p-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-xl">
+              <SectionLabel>Profile strength</SectionLabel>
+              <h2 className="mt-2 text-xl font-black sm:text-2xl">
+                Profile completion
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+                A complete profile helps other students understand who
+                created the notes they are viewing.
               </p>
             </div>
 
-            <h2 className="mt-2 text-xl font-black">Profile Strength</h2>
-
-            <div className="mt-5 rounded-2xl border border-white/10 bg-black/25 p-4">
+            <div className="w-full lg:max-w-xl">
               <div className="flex items-center justify-between text-sm font-black">
-                <span>Profile Completion</span>
-                <span>{creatorStats?.profileCompletion || 0}%</span>
+                <span>Completion</span>
+                <span className="text-red-500">{profileCompletion}%</span>
               </div>
 
-              <div className="mt-3 h-3 overflow-hidden rounded-full bg-white/10">
+              <div className="mt-3 h-3 overflow-hidden rounded-full bg-[var(--card-soft)]">
                 <div
-                  className="h-full rounded-full bg-red-600"
-                  style={{ width: `${creatorStats?.profileCompletion || 0}%` }}
+                  className="h-full rounded-full bg-red-600 transition-all duration-700"
+                  style={{ width: `${profileCompletion}%` }}
                 />
               </div>
-            </div>
 
-            {(creatorStats?.profileCompletion || 0) >= 100 ? (
-              <div className="mt-4 rounded-2xl border border-green-500/20 bg-green-500/10 p-4">
-                <p className="text-sm font-black text-green-300">
-                  Complete Profile Badge Unlocked ✅
+              {profileCompletion >= 100 ? (
+                <p className="mt-3 text-sm font-bold text-green-600">
+                  <BadgeCheck className="mr-1 inline" size={16} />
+                  Complete Profile badge unlocked
                 </p>
-                <p className="mt-1 text-xs leading-5 text-white/50">
-                  This creator completed their profile and unlocked the Complete Profile reward.
+              ) : (
+                <p className="mt-3 text-xs text-[var(--muted)]">
+                  Add a profile picture, display name, bio and occupation
+                  to complete the profile.
                 </p>
-              </div>
-            ) : (
-              <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-4">
-                <p className="text-sm font-black text-white/70">
-                  Complete your profile to unlock a badge.
-                </p>
-                <p className="mt-1 text-xs leading-5 text-white/45">
-                  Add profile picture, display name, bio and occupation.
-                </p>
-              </div>
-            )}
-
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <MiniCreatorStat label="Creator Score" value={creatorScore} />
-              <MiniCreatorStat
-                label="Upload Streak"
-                value={creatorStats?.uploadStreak || 0}
-              />
+              )}
             </div>
           </div>
         </section>
 
-        <section className="mt-5 grid gap-5 lg:grid-cols-[1fr_1fr]">
+        {/* Best performing and featured notes */}
+        <section className="grid gap-5 xl:grid-cols-2">
           <CreatorPanel
-            title="Best Performing Note"
+            title="Best performing note"
             subtitle="Top note based on downloads, likes and views"
-            icon={<Flame size={15} />}
+            icon={<Flame size={16} />}
           >
             {bestNote ? (
               <NoteRow note={bestNote} />
             ) : (
-              <EmptyBox text="No top note yet." />
+              <EmptyBox text="No top note available yet." />
             )}
           </CreatorPanel>
 
           <CreatorPanel
-            title="Featured Notes"
+            title="Featured notes"
             subtitle="Best performing uploads from this creator"
-            icon={<Award size={15} />}
+            icon={<Award size={16} />}
           >
             {topNotes.length > 0 ? (
               <div className="space-y-3">
@@ -731,35 +744,41 @@ export default function PublicProfilePage() {
                 ))}
               </div>
             ) : (
-              <EmptyBox text="Featured notes will appear here." />
+              <EmptyBox text="Featured notes will appear here once notes are uploaded." />
             )}
           </CreatorPanel>
         </section>
 
-        <section className="mt-8 md:mt-12">
-          <div className="flex items-end justify-between gap-3">
+        {/* Public library */}
+        <section className="space-y-5">
+          <div className="flex flex-col gap-3 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-red-300">
-                <Sparkles size={15} />
-                Public Library
-              </p>
-
-              <h2 className="mt-2 text-2xl font-black md:text-3xl">
-                Uploaded Notes
+              <SectionLabel>Public library</SectionLabel>
+              <h2 className="mt-2 text-2xl font-black sm:text-3xl">
+                Uploaded notes
               </h2>
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                Browse the approved notes shared by {displayName}.
+              </p>
             </div>
 
-            <p className="text-xs font-semibold text-white/45">
-              {notes.length} notes
-            </p>
+            <span className="w-fit rounded-full border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-sm font-bold text-[var(--muted-strong)]">
+              {notes.length} {notes.length === 1 ? "note" : "notes"}
+            </span>
           </div>
 
           {latestNotes.length === 0 ? (
-            <div className="mt-5 rounded-3xl border border-white/10 bg-white/[0.04] p-8 text-center text-white/50 shadow-none md:mt-6 md:p-10">
-              No uploaded notes yet.
+            <div className="rounded-3xl border border-[var(--border)] bg-[var(--card)] px-5 py-14 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+                <FileText size={26} />
+              </div>
+              <h3 className="mt-4 text-lg font-black">No notes uploaded yet</h3>
+              <p className="mt-2 text-sm text-[var(--muted)]">
+                This creator has not published any approved notes.
+              </p>
             </div>
           ) : (
-            <div className="mt-5 grid gap-4 md:mt-6 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {latestNotes.map((note) => (
                 <NoteCard key={note.id} note={note} />
               ))}
@@ -767,6 +786,39 @@ export default function PublicProfilePage() {
           )}
         </section>
       </div>
+    </main>
+  );
+}
+
+/* ------------------------------ Components ------------------------------ */
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[11px] font-black uppercase tracking-[0.2em] text-red-500">
+      {children}
+    </p>
+  );
+}
+
+function IdentityRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 text-sm">
+      <span className="flex items-center gap-2 text-[var(--muted)]">
+        {icon}
+        {label}
+      </span>
+      <span className="text-right font-black text-[var(--foreground)]">
+        {value}
+      </span>
+    </div>
   );
 }
 
@@ -782,15 +834,13 @@ function CreatorPanel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-none sm:p-6">
-      <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-red-300">
+    <div className="min-w-0 rounded-3xl border border-[var(--border)] bg-[var(--panel)] p-5 sm:p-6">
+      <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-red-500">
         {icon}
-        Creator Stats
-      </p>
-
+        Creator stats
+      </div>
       <h2 className="mt-2 text-xl font-black">{title}</h2>
-      <p className="mt-1 text-sm text-white/45">{subtitle}</p>
-
+      <p className="mt-1 text-sm text-[var(--muted)]">{subtitle}</p>
       <div className="mt-5">{children}</div>
     </div>
   );
@@ -800,50 +850,50 @@ function NoteCard({ note }: { note: PublicNote }) {
   return (
     <Link
       href={`/notes/${note.id}`}
-      className="group overflow-hidden rounded-[1.6rem] border border-white/10 bg-white/[0.04] shadow-none transition hover:border-red-500/30 hover:bg-white/[0.06]"
+      className="group min-w-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] transition hover:-translate-y-1 hover:border-red-500/40 hover:shadow-xl"
     >
-      <div className="grid grid-cols-[92px_1fr] md:block">
-        <div className="relative min-h-[125px] overflow-hidden border-r border-white/10 bg-zinc-950 md:h-52 md:border-b md:border-r-0">
-          {note.thumbnailUrl ? (
-            <Image
-              src={note.thumbnailUrl}
-              alt={note.title || "Note thumbnail"}
-              fill
-              sizes="(max-width: 768px) 92px, (max-width: 1280px) 50vw, 33vw"
-              className="object-cover transition duration-500 group-hover:scale-105"
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center bg-red-500/10">
-              <FileText className="text-red-400" size={36} />
-            </div>
-          )}
-        </div>
-
-        <div className="min-w-0 p-4 sm:p-5">
-          <h3 className="line-clamp-2 text-base font-black leading-snug sm:text-lg">
-            {note.title || "Untitled Note"}
-          </h3>
-
-          <p className="mt-2 truncate text-xs font-semibold text-white/50 sm:text-sm">
-            {note.subject || "General"} • {formatClassLabel(note.class)}
-          </p>
-
-          <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-white/45">
-            <span className="flex items-center gap-1">
-              <Download size={14} />
-              {getDownloads(note)}
-            </span>
-
-            <span className="flex items-center gap-1">
-              <Heart size={14} />
-              {getNumber(note.likes)}
-            </span>
-
-            <span className="flex items-center gap-1">
-              <Eye size={14} />
-              {getNumber(note.views)}
-            </span>
+      <div className="relative h-48 overflow-hidden bg-[var(--card-soft)] sm:h-52">
+        {note.thumbnailUrl ? (
+          <Image
+            src={note.thumbnailUrl}
+            alt={note.title || "Note thumbnail"}
+            fill
+            sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 25vw"
+            className="object-cover transition duration-500 group-hover:scale-105"
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center bg-red-500/5">
+            <FileText className="text-red-500" size={42} />
           </div>
+        )}
+
+        <div className="absolute bottom-3 left-3 rounded-lg border border-white/10 bg-black/70 px-3 py-1.5 text-xs font-bold text-white backdrop-blur">
+          {note.subject || "General"}
+        </div>
+      </div>
+
+      <div className="p-4 sm:p-5">
+        <h3 className="line-clamp-2 min-h-12 text-base font-black leading-snug">
+          {note.title || "Untitled Note"}
+        </h3>
+
+        <p className="mt-2 truncate text-xs font-semibold text-[var(--muted)]">
+          {note.subject || "General"} · {formatClassLabel(note.class)}
+        </p>
+
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[var(--border)] pt-3 text-xs font-semibold text-[var(--muted)]">
+          <span className="flex items-center gap-1.5">
+            <Download size={14} />
+            {formatNumber(getDownloads(note))}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Heart size={14} />
+            {formatNumber(getNumber(note.likes))}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Eye size={14} />
+            {formatNumber(getNumber(note.views))}
+          </span>
         </div>
       </div>
     </Link>
@@ -854,48 +904,46 @@ function NoteRow({ note }: { note: PublicNote }) {
   return (
     <Link
       href={`/notes/${note.id}`}
-      className="block rounded-2xl border border-white/10 bg-black/25 p-4 transition hover:border-red-500/30 hover:bg-white/[0.05]"
+      className="block rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 transition hover:border-red-500/40 hover:bg-[var(--surface-hover)]"
     >
       <div className="flex items-start gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-300">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
           <BookOpen size={21} />
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap gap-2">
-            <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[10px] font-bold text-red-200">
+            <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[10px] font-bold text-red-500">
               {note.subject || "General"}
             </span>
 
             {note.type && (
-              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-bold text-white/50">
+              <span className="rounded-full border border-[var(--border)] bg-[var(--card-soft)] px-2.5 py-1 text-[10px] font-bold text-[var(--muted)]">
                 {note.type}
               </span>
             )}
           </div>
 
-          <h3 className="line-clamp-2 text-sm font-black text-white">
+          <h3 className="line-clamp-2 text-sm font-black">
             {note.title || "Untitled Note"}
           </h3>
 
-          <p className="mt-1 line-clamp-1 text-xs text-white/45">
+          <p className="mt-1 line-clamp-1 text-xs text-[var(--muted)]">
             {note.topic || note.description || "No description"}
           </p>
 
-          <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-white/45">
+          <div className="mt-3 flex flex-wrap gap-4 text-xs font-semibold text-[var(--muted)]">
             <span className="flex items-center gap-1">
               <Download size={13} />
-              {getDownloads(note)}
+              {formatNumber(getDownloads(note))}
             </span>
-
             <span className="flex items-center gap-1">
               <Heart size={13} />
-              {getNumber(note.likes)}
+              {formatNumber(getNumber(note.likes))}
             </span>
-
             <span className="flex items-center gap-1">
               <Eye size={13} />
-              {getNumber(note.views)}
+              {formatNumber(getNumber(note.views))}
             </span>
           </div>
         </div>
@@ -906,7 +954,7 @@ function NoteRow({ note }: { note: PublicNote }) {
 
 function EmptyBox({ text }: { text: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/25 p-5 text-sm leading-6 text-white/45">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 text-sm leading-6 text-[var(--muted)]">
       {text}
     </div>
   );
@@ -920,11 +968,11 @@ function MiniCreatorStat({
   value: number | string | undefined | null;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
-      <p className="text-2xl font-black">
-        {Number.isFinite(Number(value)) ? Number(value) : 0}
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+      <p className="text-2xl font-black tabular-nums">
+        {formatNumber(Number.isFinite(Number(value)) ? Number(value) : 0)}
       </p>
-      <p className="mt-1 text-xs font-bold text-white/45">{label}</p>
+      <p className="mt-1 text-xs font-bold text-[var(--muted)]">{label}</p>
     </div>
   );
 }
@@ -939,22 +987,24 @@ function StatCard({
   label: string;
 }) {
   return (
-    <div className="min-w-0 rounded-[1.25rem] border border-white/10 bg-black/25 p-3 md:rounded-[1.5rem] md:p-5">
-      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/10 text-red-300 md:h-11 md:w-11">
+    <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 sm:p-4">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
         {icon}
       </div>
-
-      <p className="mt-3 truncate text-xl font-black md:text-2xl">{value}</p>
-
-      <p className="text-[11px] font-bold text-white/45 md:text-sm">
+      <p className="mt-3 truncate text-xl font-black tabular-nums sm:text-2xl">
+        {formatNumber(value)}
+      </p>
+      <p className="mt-1 text-xs font-bold text-[var(--muted)] sm:text-sm">
         {label}
       </p>
     </div>
   );
 }
 
+/* -------------------------------- Helpers -------------------------------- */
+
 function getNumber(value: unknown) {
-  return typeof value === "number" ? value : 0;
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function getDownloads(note: PublicNote) {
@@ -1025,4 +1075,14 @@ function getJoinedDate(value: unknown) {
   }
 
   return "Recently";
+}
+
+function formatNumber(value: string | number) {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) return value;
+  return new Intl.NumberFormat("en-IN", {
+    notation: numericValue >= 10000 ? "compact" : "standard",
+    maximumFractionDigits: 1,
+  }).format(numericValue);
 }

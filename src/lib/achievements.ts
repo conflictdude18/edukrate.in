@@ -54,7 +54,7 @@ export const ACHIEVEMENTS: Achievement[] = [
   {
     id: "trusted_creator",
     title: "Trusted Creator",
-    description: "A reliable contributor on NotesWallah.",
+    description: "A reliable contributor on Edukrate.",
     emoji: "🏅",
   },
 ];

@@ -1,3 +1,4 @@
+
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
@@ -18,21 +19,26 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  metadataBase: new URL("https://www.noteswallah.co.in"),
+const siteUrl = "https://edukrate.in";
+const siteTitle = "Edukrate — Learn. Organize. Grow.";
 
-  applicationName: "NotesWallah",
+const siteDescription =
+  "Edukrate is a student learning platform to discover, upload and share study notes, PDFs, assignments, previous year questions and educational resources.";
+
+export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
+
+  applicationName: "Edukrate",
 
   title: {
-    default: "NotesWallah — Free Study Notes, PDFs, PYQs & Assignments",
-    template: "%s | NotesWallah",
+    default: siteTitle,
+    template: "%s | Edukrate",
   },
 
-  description:
-    "India’s modern student platform to upload, browse and download free study notes, PDFs, assignments, PYQs and revision material.",
+  description: siteDescription,
 
   keywords: [
-    "NotesWallah",
+    "Edukrate",
     "study notes",
     "free notes",
     "PDF notes",
@@ -41,20 +47,18 @@ export const metadata: Metadata = {
     "student resources",
     "revision notes",
     "notes sharing platform",
-    "download notes",
-    "upload notes",
     "class notes",
   ],
 
-  authors: [
-    {
-      name: "NotesWallah",
-      url: "https://www.noteswallah.co.in",
-    },
-  ],
+  authors: [{ name: "Edukrate", url: siteUrl }],
+  creator: "Edukrate",
+  publisher: "Edukrate",
 
-  creator: "NotesWallah",
-  publisher: "NotesWallah",
+  icons: {
+    icon: "/edukratelogo.png",
+    shortcut: "/edukratelogo.png",
+    apple: "/edukratelogo.png",
+  },
 
   robots: {
     index: true,
@@ -69,17 +73,16 @@ export const metadata: Metadata = {
   },
 
   openGraph: {
-    title: "NotesWallah — Free Study Notes, PDFs, PYQs & Assignments",
-    description:
-      "India’s modern student platform to upload, browse and download free study notes, PDFs, assignments, PYQs and revision material.",
-    url: "https://www.noteswallah.co.in",
-    siteName: "NotesWallah",
+    title: siteTitle,
+    description: siteDescription,
+    url: siteUrl,
+    siteName: "Edukrate",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "NotesWallah Study Platform",
+        alt: "Edukrate — Learn. Organize. Grow.",
       },
     ],
     locale: "en_IN",
@@ -88,15 +91,13 @@ export const metadata: Metadata = {
 
   twitter: {
     card: "summary_large_image",
-    title: "NotesWallah — Free Study Notes, PDFs, PYQs & Assignments",
-    description:
-      "India’s modern student platform to upload, browse and download free study notes, PDFs, assignments, PYQs and revision material.",
+    title: siteTitle,
+    description: siteDescription,
     images: ["/og-image.png"],
-    creator: "@noteswallah",
   },
 
   alternates: {
-    canonical: "https://www.noteswallah.co.in",
+    canonical: siteUrl,
   },
 
   category: "education",
@@ -110,9 +111,10 @@ export default function RootLayout({
   const organizationSchema = {
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: "NotesWallah",
-    url: "https://www.noteswallah.co.in",
-    logo: "https://www.noteswallah.co.in/logo.png",
+    name: "Edukrate",
+    slogan: "Learn. Organize. Grow.",
+    url: siteUrl,
+    logo: `${siteUrl}/edukratelogowithname.png`,
   };
 
   return (
@@ -121,7 +123,7 @@ export default function RootLayout({
       data-scroll-behavior="smooth"
       className={`${geistSans.variable} ${geistMono.variable} antialiased`}
     >
-      <body className="min-h-screen overflow-x-hidden bg-[#050505] text-white selection:bg-red-500/30 selection:text-white">
+      <body className="min-h-screen overflow-x-hidden bg-[var(--background)] text-[var(--foreground)]">
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{

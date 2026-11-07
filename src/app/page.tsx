@@ -1,36 +1,47 @@
+
 "use client";
 
-import type React from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot } from "firebase/firestore";
+import {
+  collection,
+  onSnapshot,
+} from "firebase/firestore";
 import {
   ArrowRight,
   BookOpen,
   Bot,
   Download,
-  Eye,
   FileText,
-  Heart,
-  Lock,
-  Search,
+  GraduationCap,
   ShieldCheck,
   Sparkles,
   TrendingUp,
   UploadCloud,
+  Bookmark,
+  MessageSquare,
+  Trophy,
+  Video,
   Users,
+  Flame,
 } from "lucide-react";
 
 import { db } from "@/firebase/firebase";
 import { useAuth } from "@/contexts/AuthContext";
+import { getVideos } from "@/lib/videos";
 import type { Note } from "@/types/note";
 
 type HomeNote = Note & {
   id: string;
+  title?: string;
+  subject?: string;
+  class?: string | number;
   board?: string;
-  type?: string;
   topic?: string;
+  thumbnailUrl?: string;
+  fileUrl?: string;
+  status?: string;
   views?: number;
   viewsCount?: number;
   likes?: number;
@@ -40,414 +51,161 @@ type HomeNote = Note & {
   createdAt?: unknown;
 };
 
-export default function HomePage() {
-  const { user } = useAuth();
-  const [notes, setNotes] = useState<HomeNote[]>([]);
-  const [stats, setStats] = useState({
-    notes: 0,
-    users: 0,
-    subjects: 0,
-    downloads: 0,
-  });
+type HomeStats = {
+  notes: number;
+  videos: number;
+  subjects: number;
+  downloads: number;
+  students: number;
+};
 
-  useEffect(() => {
-    const unsubscribeNotes = onSnapshot(collection(db, "notes"), (notesSnap) => {
-      const approvedNotes: HomeNote[] = notesSnap.docs
-        .map((noteDoc) => ({
-          id: noteDoc.id,
-          ...(noteDoc.data() as Omit<HomeNote, "id">),
-        }))
-        .filter((note) => note.status === "approved");
+const DEFAULT_SUBJECTS = [
+  "Physics",
+  "Chemistry",
+  "Mathematics",
+  "Biology",
+  "JEE",
+  "NEET",
+];
 
-      const subjects = new Set(
-        approvedNotes.map((note) => note.subject).filter(Boolean)
-      );
+function getNumber(value: unknown): number {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : 0;
+}
 
-      const downloads = approvedNotes.reduce(
-        (sum, note) => sum + getDownloads(note),
-        0
-      );
-
-      setNotes(approvedNotes);
-      setStats((prev) => ({
-        ...prev,
-        notes: approvedNotes.length,
-        subjects: subjects.size,
-        downloads,
-      }));
-    });
-
-    const unsubscribeUsers = onSnapshot(collection(db, "users"), (usersSnap) => {
-      setStats((prev) => ({
-        ...prev,
-        users: usersSnap.size,
-      }));
-    });
-
-    return () => {
-      unsubscribeNotes();
-      unsubscribeUsers();
-    };
-  }, []);
-
-  const trendingNotes = useMemo(() => {
-    return [...notes]
-      .sort((a, b) => getTrendingScore(b) - getTrendingScore(a))
-      .slice(0, 6);
-  }, [notes]);
-
-  const latestNotes = useMemo(() => {
-    return [...notes]
-      .sort((a, b) => getCreatedTime(b.createdAt) - getCreatedTime(a.createdAt))
-      .slice(0, 4);
-  }, [notes]);
-
-  const subjectLinks = useMemo(() => {
-    const subjectMap = new Map<string, { label: string; count: number }>();
-
-    notes.forEach((note) => {
-      if (!note.subject?.trim()) return;
-
-      const label = note.subject.trim();
-      const key = label.toLowerCase();
-
-      subjectMap.set(key, {
-        label,
-        count: (subjectMap.get(key)?.count || 0) + 1,
-      });
-    });
-
-    const subjects = Array.from(subjectMap.values())
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
-
-    return subjects.length
-      ? subjects
-      : [
-          { label: "Physics", count: 0 },
-          { label: "Chemistry", count: 0 },
-          { label: "Mathematics", count: 0 },
-          { label: "Biology", count: 0 },
-          { label: "JEE", count: 0 },
-          { label: "NEET", count: 0 },
-        ];
-  }, [notes]);
-
+function getDownloads(note: HomeNote): number {
   return (
-    <div
-      className={
-        user
-          ? "mx-auto w-full max-w-7xl space-y-8 px-4 pb-24 text-white sm:px-6 lg:px-8"
-          : "min-h-screen overflow-x-hidden bg-[#050505] text-white"
+    getNumber(note.downloadsCount) ||
+    getNumber(note.downloads)
+  );
+}
+
+function getLikes(note: HomeNote): number {
+  return (
+    getNumber(note.likesCount) ||
+    getNumber(note.likes)
+  );
+}
+
+function getViews(note: HomeNote): number {
+  return (
+    getNumber(note.viewsCount) ||
+    getNumber(note.views)
+  );
+}
+
+function getTrendingScore(note: HomeNote): number {
+  return (
+    getDownloads(note) * 3 +
+    getLikes(note) * 2 +
+    getViews(note)
+  );
+}
+
+function getCreatedTime(note: HomeNote): number {
+  const value = note.createdAt as
+    | {
+        toDate?: () => Date;
+        seconds?: number;
       }
-    >
-      {!user && <GuestNav />}
+    | string
+    | number
+    | Date
+    | null
+    | undefined;
 
-      <div
-        className={
-          !user
-            ? "mx-auto w-full max-w-7xl space-y-8 px-4 py-6 sm:px-6 lg:px-8"
-            : "space-y-8"
-        }
-      >
-        <section className="relative overflow-hidden">
-          <div className="pointer-events-none absolute -left-20 -top-24 h-72 w-72 rounded-full bg-red-500/15 blur-[120px]" />
-          <div className="pointer-events-none absolute right-0 top-20 h-72 w-72 rounded-full bg-red-900/20 blur-[120px]" />
+  if (!value) return 0;
 
-          <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)] lg:items-end">
-            <div className="min-w-0">
-              <div className="inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-4 py-2 text-xs font-black text-red-300">
-                <Sparkles size={16} />
-                India’s Student Knowledge Network
-              </div>
+  if (typeof value === "object" && value instanceof Date) {
+    return value.getTime();
+  }
 
-              <h1 className="mt-5 max-w-4xl text-4xl font-black tracking-tight sm:text-6xl lg:text-7xl">
-                Study smarter with{" "}
-                <span className="text-red-400">NotesWallah</span>
-              </h1>
+  if (
+    typeof value === "object" &&
+    typeof value.toDate === "function"
+  ) {
+    return value.toDate().getTime();
+  }
 
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-white/58 sm:text-base">
-                Discover quality notes, upload study material, save resources,
-                follow creators, and use Notique AI to learn faster.
-              </p>
+  if (
+    typeof value === "object" &&
+    typeof value.seconds === "number"
+  ) {
+    return value.seconds * 1000;
+  }
 
-              <Link
-                href={user ? "/browse" : "/signin"}
-                className="mt-6 flex max-w-2xl items-center gap-3 rounded-3xl border border-white/10 bg-white/[0.04] px-4 py-4 transition hover:border-red-500/30 hover:bg-white/[0.06]"
-              >
-                <Search size={20} className="text-white/40" />
-                <span className="text-sm font-semibold text-white/45">
-                  Search notes, subjects, chapters, exams...
-                </span>
-              </Link>
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value).getTime();
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
 
-              <div className="mt-4 grid grid-cols-2 gap-3 sm:flex">
-                <Link
-                  href={user ? "/browse" : "/signin"}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 px-5 py-4 text-sm font-black text-white transition hover:bg-red-500"
-                >
-                  Browse Notes
-                  <ArrowRight size={18} />
-                </Link>
-
-                <Link
-                  href={user ? "/upload" : "/signin"}
-                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 text-sm font-black text-white/80 transition hover:border-red-500/30 hover:text-white"
-                >
-                  Upload Notes
-                  <UploadCloud size={18} />
-                </Link>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 lg:self-end">
-              <HeroStat label="Notes" value={stats.notes} />
-              <HeroStat label="Students" value={stats.users} />
-              <HeroStat label="Subjects" value={stats.subjects} />
-              <HeroStat label="Downloads" value={stats.downloads} />
-            </div>
-          </div>
-        </section>
-
-        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <FeatureCard icon={<BookOpen />} title="Browse Notes" text="Find PDFs by class, subject, topic and exam." />
-          <FeatureCard icon={<UploadCloud />} title="Upload Material" text="Help students by sharing useful notes." />
-          <FeatureCard icon={<Heart />} title="Save Library" text="Bookmark important notes for revision." />
-          <FeatureCard icon={<ShieldCheck />} title="Moderated" text="Uploads are reviewed for better quality." />
-        </section>
-
-        <section>
-          <SectionHeader
-            icon={<TrendingUp size={16} />}
-            eyebrow="Trending Now"
-            title="Popular Notes"
-            description="Notes students are viewing, saving and downloading."
-            actionHref={user ? "/browse" : "/signin"}
-            actionLabel="View All"
-          />
-
-          {trendingNotes.length === 0 ? (
-            <EmptyNotes />
-          ) : (
-            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {trendingNotes.map((note) => (
-                <NoteCard key={note.id} note={note} locked={!user} />
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="min-w-0">
-            <SectionHeader
-              icon={<FileText size={16} />}
-              eyebrow="Fresh Uploads"
-              title="Latest Uploads"
-              description="Freshly approved notes from the community."
-            />
-
-            <div className="mt-5 divide-y divide-white/10 border-y border-white/10">
-              {latestNotes.length === 0 ? (
-                <EmptyBox text="Latest notes will appear here once students upload approved material." />
-              ) : (
-                latestNotes.map((note) => (
-                  <Link
-                    key={note.id}
-                    href={user ? `/notes/${note.id}` : "/signin"}
-                    className="flex items-center gap-4 py-4 transition hover:bg-white/[0.025] sm:px-2"
-                  >
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-300">
-                      <FileText size={22} />
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <h3 className="line-clamp-1 font-black">
-                        {note.title || "Untitled Note"}
-                      </h3>
-                      <p className="mt-1 line-clamp-1 text-sm text-white/45">
-                        {note.subject || "Subject"} • Class {note.class || "N/A"}
-                      </p>
-                    </div>
-
-                    <ArrowRight size={16} className="shrink-0 text-white/35" />
-                  </Link>
-                ))
-              )}
-            </div>
-          </div>
-
-          <aside className="min-w-0 space-y-5">
-            <div className="rounded-3xl border border-red-500/20 bg-red-500/8 p-5">
-              <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500/15 text-red-300">
-                  <Bot size={24} />
-                </div>
-
-                <div className="min-w-0">
-                  <h3 className="font-black">Notique AI</h3>
-                  <p className="mt-2 text-sm leading-6 text-white/60">
-                    Summarize notes, understand concepts, and get study help
-                    inside NotesWallah.
-                  </p>
-
-                  <Link
-                    href={user ? "/notique" : "/signin"}
-                    className="mt-4 inline-flex items-center gap-2 text-sm font-black text-red-300"
-                  >
-                    Open Notique
-                    <ArrowRight size={16} />
-                  </Link>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <SectionHeader
-                icon={<BookOpen size={16} />}
-                eyebrow="Subjects"
-                title="Popular Subjects"
-              />
-
-              <div className="mt-4 grid gap-2">
-                {subjectLinks.slice(0, 6).map((subject) => (
-                  <Link
-                    key={subject.label}
-                    href={
-                      user
-                        ? `/browse?search=${encodeURIComponent(subject.label)}`
-                        : "/signin"
-                    }
-                    className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3 text-sm font-bold text-white/70 transition hover:border-red-500/30 hover:bg-white/[0.055] hover:text-white"
-                  >
-                    <span className="min-w-0 truncate">{subject.label}</span>
-                    <span className="flex shrink-0 items-center gap-2 text-xs text-white/35">
-                      {subject.count > 0 ? `${subject.count} notes` : "Explore"}
-                      <ArrowRight size={14} />
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </aside>
-        </section>
-
-        <section className="rounded-3xl border border-white/10 bg-white/[0.035] p-5 sm:p-7">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-sm font-black text-red-300">
-                <Users size={18} />
-                Built by students, for students
-              </div>
-
-              <h2 className="mt-3 text-2xl font-black sm:text-3xl">
-                Share notes and help the community grow.
-              </h2>
-
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
-                NotesWallah grows when students upload useful material, follow
-                good creators, and help each other learn better.
-              </p>
-            </div>
-
-            <Link
-              href={user ? "/upload" : "/signin"}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-red-600 px-5 py-4 text-sm font-black text-white transition hover:bg-red-500"
-            >
-              Start Contributing
-              <ArrowRight size={17} />
-            </Link>
-          </div>
-        </section>
-
-        {!user && (
-          <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-red-600 to-red-950 p-6 sm:p-8 lg:p-10">
-            <h2 className="text-3xl font-black sm:text-5xl">
-              Unlock your study workspace
-            </h2>
-
-            <p className="mt-3 max-w-2xl text-sm leading-7 text-white/80">
-              Sign in to access notes, save resources, upload PDFs, follow
-              creators, and use Notique AI.
-            </p>
-
-            <Link
-              href="/signin"
-              className="mt-6 inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-6 py-4 text-sm font-black text-black transition hover:bg-white/90"
-            >
-              <Lock size={17} />
-              Sign In / Sign Up
-            </Link>
-          </section>
-        )}
-      </div>
-    </div>
-  );
+  return 0;
 }
 
-function GuestNav() {
-  return (
-    <nav className="sticky top-4 z-50 mx-auto flex w-[calc(100%-2rem)] max-w-7xl items-center justify-between rounded-3xl border border-white/10 bg-black/70 px-4 py-3 text-white backdrop-blur-xl sm:w-[calc(100%-3rem)]">
-      <div className="flex items-center gap-3">
-        <Image
-          src="/logo.png"
-          alt="NotesWallah"
-          width={42}
-          height={42}
-          className="rounded-xl"
-          priority
-        />
-        <span className="text-lg font-black">
-          Notes<span className="text-red-400">Wallah</span>
-        </span>
-      </div>
-
-      <Link
-        href="/signin"
-        className="inline-flex items-center gap-2 rounded-2xl bg-red-600 px-4 py-3 text-xs font-black text-white transition hover:bg-red-500"
-      >
-        <Lock size={15} />
-        Sign In
-      </Link>
-    </nav>
-  );
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat("en-IN", {
+    notation: value >= 10000 ? "compact" : "standard",
+    maximumFractionDigits: 1,
+  }).format(value);
 }
 
-function SectionHeader({
-  icon,
+function formatDate(note: HomeNote): string {
+  const time = getCreatedTime(note);
+
+  if (!time) return "Recently added";
+
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(time));
+}
+
+function getNoteHref(note: HomeNote, isLoggedIn: boolean): string {
+  return isLoggedIn
+    ? `/notes/${encodeURIComponent(note.id)}`
+    : "/signin";
+}
+
+function SectionHeading({
   eyebrow,
   title,
   description,
-  actionHref,
-  actionLabel,
+  href,
+  linkLabel,
 }: {
-  icon?: React.ReactNode;
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
   description?: string;
-  actionHref?: string;
-  actionLabel?: string;
+  href?: string;
+  linkLabel?: string;
 }) {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-      <div className="min-w-0">
-        <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-red-300">
-          {icon}
-          {eyebrow}
-        </p>
+    <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+      <div>
+        {eyebrow && (
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[var(--primary)]">
+            {eyebrow}
+          </p>
+        )}
 
-        <h2 className="mt-2 text-2xl font-black sm:text-3xl">{title}</h2>
+        <h2 className="text-2xl font-bold tracking-tight text-[var(--foreground)] sm:text-3xl">
+          {title}
+        </h2>
 
         {description && (
-          <p className="mt-1 text-sm text-white/50">{description}</p>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--muted)] sm:text-base">
+            {description}
+          </p>
         )}
       </div>
 
-      {actionHref && actionLabel && (
+      {href && linkLabel && (
         <Link
-          href={actionHref}
-          className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm font-black text-white/65 transition hover:border-red-500/30 hover:text-white"
+          href={href}
+          className="inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--surface-hover)]"
         >
-          {actionLabel}
+          {linkLabel}
           <ArrowRight size={16} />
         </Link>
       )}
@@ -455,84 +213,73 @@ function SectionHeader({
   );
 }
 
-function HeroStat({ label, value }: { label: string; value: number }) {
+function EmptyBox({ text }: { text: string }) {
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-4">
-      <p className="text-2xl font-black sm:text-3xl">{value}+</p>
-      <p className="mt-1 text-xs font-bold text-white/45">{label}</p>
+    <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)] px-6 py-10 text-center">
+      <FileText
+        size={28}
+        className="mx-auto mb-3 text-[var(--muted)]"
+      />
+
+      <p className="mx-auto max-w-md text-sm leading-6 text-[var(--muted)]">
+        {text}
+      </p>
     </div>
   );
 }
 
-function FeatureCard({
-  icon,
-  title,
-  text,
+function NoteCard({
+  note,
+  isLoggedIn,
 }: {
-  icon: React.ReactNode;
-  title: string;
-  text: string;
+  note: HomeNote;
+  isLoggedIn: boolean;
 }) {
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/[0.035] p-5">
-      <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-red-500/10 text-red-300">
-        {icon}
-      </div>
-      <h3 className="font-black">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-white/50">{text}</p>
-    </div>
-  );
-}
-
-function NoteCard({ note, locked }: { note: HomeNote; locked: boolean }) {
-  return (
     <Link
-      href={locked ? "/signin" : `/notes/${note.id}`}
-      className="group overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] transition hover:border-red-500/30 hover:bg-white/[0.055]"
+      href={getNoteHref(note, isLoggedIn)}
+      className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] transition duration-200 hover:-translate-y-0.5 hover:border-[var(--primary)]/40 hover:shadow-lg"
     >
-      <div className="relative h-36 border-b border-white/10 bg-black/30">
+      <div className="relative flex aspect-[16/9] items-center justify-center overflow-hidden bg-[var(--card-soft)]">
         {note.thumbnailUrl ? (
           <Image
             src={note.thumbnailUrl}
-            alt={note.title || "Note thumbnail"}
+            alt={note.title || "Study notes"}
             fill
-            sizes="(max-width: 768px) 100vw, 33vw"
-            className="object-cover transition duration-500 group-hover:scale-105"
+            sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 30vw"
+            className="object-cover transition duration-300 group-hover:scale-[1.03]"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-white/35">
-            <FileText size={34} />
+          <div className="flex h-full w-full items-center justify-center">
+            <FileText
+              size={38}
+              strokeWidth={1.5}
+              className="text-[var(--muted)]"
+            />
           </div>
         )}
 
-        {locked && (
-          <div className="absolute right-3 top-3 rounded-full border border-white/10 bg-black/60 px-3 py-1 text-xs font-black text-white/70 backdrop-blur">
-            Locked
-          </div>
-        )}
+        <span className="absolute left-3 top-3 rounded-lg border border-[var(--border)] bg-[var(--panel)]/95 px-2.5 py-1 text-xs font-semibold text-[var(--foreground)]">
+          {note.subject || "Study Notes"}
+        </span>
       </div>
 
-      <div className="p-4">
-        <h3 className="line-clamp-2 font-black">
+      <div className="flex flex-1 flex-col p-4">
+        <h3 className="line-clamp-2 min-h-12 font-bold leading-6 text-[var(--foreground)]">
           {note.title || "Untitled Note"}
         </h3>
 
-        <p className="mt-2 line-clamp-1 text-sm text-white/45">
-          {note.subject || "Subject"} • Class {note.class || "N/A"}
+        <p className="mt-2 line-clamp-1 text-sm text-[var(--muted)]">
+          {note.board ? `${note.board} · ` : ""}
+          {note.class ? `Class ${note.class}` : "Study material"}
         </p>
 
-        <div className="mt-4 flex flex-wrap gap-3 text-xs font-semibold text-white/45">
-          <span className="flex items-center gap-1">
-            <Download size={13} />
-            {getDownloads(note)}
-          </span>
-          <span className="flex items-center gap-1">
-            <Heart size={13} />
-            {getLikes(note)}
-          </span>
-          <span className="flex items-center gap-1">
-            <Eye size={13} />
-            {getViews(note)}
+        <div className="mt-4 flex items-center justify-between gap-3 border-t border-[var(--border)] pt-3 text-xs text-[var(--muted)]">
+          <span>{formatDate(note)}</span>
+
+          <span className="inline-flex items-center gap-1.5 font-semibold text-[var(--foreground)] transition group-hover:text-[var(--primary)]">
+            View notes
+            <ArrowRight size={14} />
           </span>
         </div>
       </div>
@@ -540,57 +287,661 @@ function NoteCard({ note, locked }: { note: HomeNote; locked: boolean }) {
   );
 }
 
-function EmptyNotes() {
-  return (
-    <div className="mt-5 rounded-3xl border border-dashed border-white/10 bg-white/[0.025] p-8 text-center">
-      <FileText className="mx-auto text-white/35" size={42} />
-      <h3 className="mt-4 text-xl font-black">No approved notes yet</h3>
-      <p className="mt-2 text-sm text-white/50">
-        Trending notes will appear here after approval.
-      </p>
-    </div>
+export default function HomePage() {
+  const { user } = useAuth();
+
+  const [notes, setNotes] = useState<HomeNote[]>([]);
+  const [studentCount, setStudentCount] = useState(0);
+  const [videoCount, setVideoCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [videosLoading, setVideosLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribeNotes = onSnapshot(
+      collection(db, "notes"),
+      (snapshot) => {
+        const approvedNotes = snapshot.docs
+          .map(
+            (document) =>
+              ({
+                ...document.data(),
+                id: document.id,
+              }) as HomeNote
+          )
+          .filter((note) => note.status === "approved");
+
+        setNotes(approvedNotes);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Failed to load homepage notes:", error);
+        setLoading(false);
+      }
+    );
+
+    const unsubscribeUsers = onSnapshot(
+      collection(db, "users"),
+      (snapshot) => {
+        setStudentCount(snapshot.size);
+      },
+      (error) => {
+        console.error("Failed to load student count:", error);
+      }
+    );
+
+    return () => {
+      unsubscribeNotes();
+      unsubscribeUsers();
+    };
+  }, []);
+
+  // Get the video count from the same source used by the Video Library.
+  useEffect(() => {
+    let active = true;
+
+    async function loadVideoCount() {
+      try {
+        const videos = await getVideos();
+
+        if (active) {
+          setVideoCount(videos.length);
+        }
+      } catch (error) {
+        console.error("Failed to load video count:", error);
+      } finally {
+        if (active) {
+          setVideosLoading(false);
+        }
+      }
+    }
+
+    loadVideoCount();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const stats = useMemo<HomeStats>(() => {
+    const subjects = new Set(
+      notes
+        .map((note) => note.subject?.trim())
+        .filter((subject): subject is string => Boolean(subject))
+    );
+
+    const downloads = notes.reduce(
+      (total, note) => total + getDownloads(note),
+      0
+    );
+
+    return {
+      notes: notes.length,
+      subjects: subjects.size,
+      downloads,
+      students: studentCount,
+      videos: videoCount,
+    };
+  }, [notes, studentCount, videoCount]);
+
+  const trendingNotes = useMemo(
+    () =>
+      [...notes]
+        .sort((a, b) => getTrendingScore(b) - getTrendingScore(a))
+        .slice(0, 6),
+    [notes]
   );
-}
 
-function EmptyBox({ text }: { text: string }) {
-  return <div className="py-5 text-sm leading-6 text-white/45">{text}</div>;
-}
+  const latestNotes = useMemo(
+    () =>
+      [...notes]
+        .sort((a, b) => getCreatedTime(b) - getCreatedTime(a))
+        .slice(0, 4),
+    [notes]
+  );
 
-function getNumber(value: unknown) {
-  return typeof value === "number" ? value : 0;
-}
+  const subjectLinks = useMemo(() => {
+    const counts = new Map<string, number>();
 
-function getDownloads(note: HomeNote) {
-  return getNumber(note.downloadsCount) || getNumber(note.downloads);
-}
+    notes.forEach((note) => {
+      const subject = note.subject?.trim();
 
-function getLikes(note: HomeNote) {
-  return getNumber(note.likesCount) || getNumber(note.likes);
-}
+      if (subject) {
+        counts.set(subject, (counts.get(subject) || 0) + 1);
+      }
+    });
 
-function getViews(note: HomeNote) {
-  return getNumber(note.viewsCount) || getNumber(note.views);
-}
+    if (counts.size === 0) {
+      return DEFAULT_SUBJECTS.map((name) => ({
+        name,
+        count: 0,
+      }));
+    }
 
-function getTrendingScore(note: HomeNote) {
-  return getDownloads(note) * 3 + getLikes(note) * 2 + getViews(note);
-}
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([name, count]) => ({ name, count }));
+  }, [notes]);
 
-function getCreatedTime(value: unknown) {
-  if (!value) return 0;
+  return (
+    <main className="w-full min-w-0 bg-[var(--background)] text-[var(--foreground)]">
+      <div className="w-full min-w-0 pb-16">
+        {!user && (
+          <header className="mb-8 flex items-center justify-between gap-4 rounded-2xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 sm:px-6">
+            <Link
+              href="/"
+              aria-label="Edukrate home"
+              className="flex min-w-0 items-center gap-3"
+            >
+              <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl">
+                <Image
+                  src="/edukratelogo.png"
+                  alt="Edukrate logo"
+                  fill
+                  sizes="40px"
+                  className="object-contain"
+                />
+              </div>
 
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    "toDate" in value &&
-    typeof value.toDate === "function"
-  ) {
-    return value.toDate().getTime();
-  }
+              <span className="text-lg font-extrabold tracking-tight text-[var(--foreground)] sm:text-xl">
+                Edukrate
+              </span>
+            </Link>
 
-  if (typeof value === "string") {
-    return new Date(value).getTime() || 0;
-  }
+            <div className="flex shrink-0 items-center gap-2">
+              <Link
+                href="/signin"
+                className="rounded-xl px-3 py-2 text-sm font-semibold transition hover:bg-[var(--surface-hover)] sm:px-4"
+              >
+                Sign in
+              </Link>
 
-  return 0;
+              <Link
+                href="/signup"
+                className="rounded-xl bg-[var(--primary)] px-3 py-2 text-sm font-bold text-white transition hover:bg-[var(--primary-hover)] sm:px-5"
+              >
+                Get started
+              </Link>
+            </div>
+          </header>
+        )}
+
+        <section className="grid items-stretch gap-6 lg:grid-cols-[1.25fr_0.75fr] lg:gap-8">
+          <div className="flex flex-col justify-center rounded-3xl border border-[var(--border)] bg-[var(--panel)] p-6 sm:p-9 lg:p-12">
+            <div className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--muted-strong)]">
+              <Sparkles size={15} className="text-[var(--primary)]" />
+              Your learning space, all in one place
+            </div>
+
+            <h1 className="max-w-3xl text-4xl font-black leading-[1.1] tracking-tight text-[var(--foreground)] sm:text-5xl lg:text-6xl">
+              Study smarter with{" "}
+              <span className="text-[var(--foreground)]">
+                Edukrate
+              </span>
+            </h1>
+
+            <p className="mt-5 max-w-2xl text-base leading-7 text-[var(--muted)] sm:text-lg sm:leading-8">
+              Find study notes, explore learning resources, and prepare
+              for your next exam with material shared by your learning
+              community.
+            </p>
+
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                href={user ? "/browse" : "/signup"}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-3.5 text-sm font-bold text-white transition hover:bg-[var(--primary-hover)]"
+              >
+                Explore notes
+                <ArrowRight size={17} />
+              </Link>
+
+              <Link
+                href={user ? "/upload" : "/signin"}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-5 py-3.5 text-sm font-bold text-[var(--foreground)] transition hover:bg-[var(--surface-hover)]"
+              >
+                <UploadCloud size={17} />
+                Share your notes
+              </Link>
+            </div>
+
+            <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3 text-sm text-[var(--muted)]">
+              <span className="inline-flex items-center gap-2">
+                <ShieldCheck
+                  size={17}
+                  className="text-[var(--success)]"
+                />
+                Curated study resources
+              </span>
+
+              <span className="inline-flex items-center gap-2">
+                <BookOpen
+                  size={17}
+                  className="text-[var(--primary)]"
+                />
+                Multiple subjects
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <div className="relative flex flex-1 flex-col justify-between overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 sm:p-8">
+              <div>
+                <div className="relative mb-5 h-12 w-12 overflow-hidden rounded-2xl">
+                  <Image
+                    src="/notique-icon.png"
+                    alt="Notique AI"
+                    fill
+                    sizes="48px"
+                    className="object-contain"
+                  />
+                </div>
+
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--primary)]">
+                  Meet your study assistant
+                </p>
+
+                <h2 className="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">
+                  Learn with Notique AI
+                </h2>
+
+                <p className="mt-3 max-w-md text-sm leading-6 text-[var(--muted)] sm:text-base">
+                  Get help understanding topics, exploring concepts,
+                  and making your study sessions more productive.
+                </p>
+              </div>
+
+              <Link
+                href={user ? "/notique" : "/signin"}
+                className="mt-8 inline-flex w-fit items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--panel)] px-4 py-3 text-sm font-bold transition hover:bg-[var(--surface-hover)]"
+              >
+                Try Notique AI
+                <ArrowRight size={16} />
+              </Link>
+            </div>
+
+            <div className="rounded-3xl bg-[var(--primary)] p-6 text-white sm:p-7">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium text-white/80">
+                    Ready to contribute?
+                  </p>
+
+                  <h3 className="mt-1 text-xl font-bold">
+                    Share what you know.
+                  </h3>
+                </div>
+
+                <UploadCloud size={30} />
+              </div>
+
+              <Link
+                href={user ? "/upload" : "/signup"}
+                className="mt-5 inline-flex w-fit items-center justify-center gap-2 rounded-xl !bg-white px-5 py-3 text-sm font-bold !text-red-700 transition hover:!bg-red-50"
+              >
+                <UploadCloud size={16} />
+                Upload notes
+                <ArrowRight size={16} />
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        <section
+          aria-label="Edukrate statistics"
+          className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4"
+        >
+          {[
+            {
+              label: "Approved notes",
+              value: formatNumber(stats.notes),
+              icon: FileText,
+            },
+            {
+              label: "Videos in Library",
+              value: videosLoading ? "—" : formatNumber(stats.videos),
+              icon: Video,
+            },
+            {
+              label: "Total downloads",
+              value: formatNumber(stats.downloads),
+              icon: Download,
+            },
+            {
+              label: "Community members",
+              value: formatNumber(stats.students),
+              icon: Users,
+            },
+          ].map((stat) => {
+            const Icon = stat.icon;
+
+            return (
+              <div
+                key={stat.label}
+                className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-medium leading-5 text-[var(--muted)] sm:text-sm">
+                    {stat.label}
+                  </p>
+
+                  <Icon
+                    size={19}
+                    className="shrink-0 text-[var(--primary)]"
+                  />
+                </div>
+
+                <p className="mt-3 text-2xl font-extrabold tracking-tight sm:text-3xl">
+                  {loading && stat.label !== "Videos in Library"
+                    ? "—"
+                    : stat.value}
+                </p>
+              </div>
+            );
+          })}
+        </section>
+
+        <section className="mt-14">
+          <SectionHeading
+            eyebrow="The Edukrate ecosystem"
+            title="Explore everything in one place"
+            description="More than notes. Discover tools, content and people that make learning better."
+          />
+
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {[
+              {
+                icon: BookOpen,
+                title: "Notes Library",
+                description:
+                  "Discover notes, study material and revision resources.",
+                href: "/browse",
+                label: "Explore library",
+              },
+              {
+                icon: Video,
+                title: "Video Library",
+                description:
+                  "Explore educational videos and visual learning resources.",
+                href: "/videos",
+                label: "Watch videos",
+              },
+              {
+                icon: MessageSquare,
+                title: "Feedback & Suggestions",
+                description:
+                  "Share your ideas and help improve Edukrate.",
+                href: "/feedback",
+                label: "Share feedback",
+              },
+              {
+                icon: Bot,
+                title: "Notique AI",
+                description:
+                  "Get AI-powered assistance with your learning.",
+                href: "/notique",
+                label: "Meet Notique",
+              },
+              {
+                icon: Trophy,
+                title: "Hall of Fame",
+                description:
+                  "Explore contributors and celebrate the community.",
+                href: "/hall-of-fame",
+                label: "Meet contributors",
+              },
+              {
+                icon: Users,
+                title: "Creators",
+                description:
+                  "Discover creators sharing useful educational content.",
+                href: "/creators",
+                label: "Discover creators",
+              },
+              {
+                icon: Flame,
+                title: "Trending",
+                description:
+                  "See what's popular across the learning community.",
+                href: "/trending",
+                label: "Explore trending",
+              },
+              {
+                icon: Bookmark,
+                title: "Saved Notes",
+                description:
+                  "Keep useful study resources together for later.",
+                href: "/saved-notes",
+                label: "View saved notes",
+              },
+              {
+                icon: UploadCloud,
+                title: "My Notes",
+                description:
+                  "Manage and keep track of your contributions.",
+                href: "/my-notes",
+                label: "Manage notes",
+              },
+            ].map((feature) => {
+              const Icon = feature.icon;
+
+              return (
+                <Link
+                  key={feature.title}
+                  href={user ? feature.href : "/signin"}
+                  className="group flex flex-col rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 transition duration-200 hover:-translate-y-1 hover:border-[var(--primary)]/50 hover:bg-[var(--surface-hover)] sm:p-6"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--card-soft)] text-[var(--primary)]">
+                      <Icon size={23} />
+                    </div>
+
+                    <ArrowRight
+                      size={18}
+                      className="text-[var(--muted)] transition group-hover:translate-x-1 group-hover:text-[var(--primary)]"
+                    />
+                  </div>
+
+                  <h3 className="mt-5 text-lg font-bold text-[var(--foreground)]">
+                    {feature.title}
+                  </h3>
+
+                  <p className="mt-2 flex-1 text-sm leading-6 text-[var(--muted)]">
+                    {feature.description}
+                  </p>
+
+                  <div className="mt-5 border-t border-[var(--border)] pt-4">
+                    <span className="text-sm font-bold text-[var(--foreground)] transition group-hover:text-[var(--primary)]">
+                      {feature.label}
+                      <span className="ml-2">→</span>
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="mt-14">
+          <SectionHeading
+            eyebrow="Popular resources"
+            title="Trending notes"
+            description="Study material gaining attention in the Edukrate community."
+            href="/browse"
+            linkLabel="View all notes"
+          />
+
+          {loading ? (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {[1, 2, 3, 4, 5, 6].map((item) => (
+                <div
+                  key={item}
+                  className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]"
+                >
+                  <div className="aspect-[16/9] animate-pulse bg-[var(--card-soft)]" />
+
+                  <div className="space-y-3 p-4">
+                    <div className="h-4 w-3/4 animate-pulse rounded bg-[var(--card-soft)]" />
+                    <div className="h-3 w-1/2 animate-pulse rounded bg-[var(--card-soft)]" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : trendingNotes.length === 0 ? (
+            <EmptyBox text="Trending notes will appear here when approved study material is available." />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {trendingNotes.map((note) => (
+                <NoteCard
+                  key={note.id}
+                  note={note}
+                  isLoggedIn={Boolean(user)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="mt-14">
+          <SectionHeading
+            eyebrow="Freshly added"
+            title="Latest uploads"
+            description="Recently approved notes to add to your study collection."
+            href="/browse"
+            linkLabel="Browse library"
+          />
+
+          {loading ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {[1, 2, 3, 4].map((item) => (
+                <div
+                  key={item}
+                  className="h-24 animate-pulse rounded-2xl border border-[var(--border)] bg-[var(--card)]"
+                />
+              ))}
+            </div>
+          ) : latestNotes.length === 0 ? (
+            <EmptyBox text="Latest notes will appear here once students upload approved material." />
+          ) : (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {latestNotes.map((note) => (
+                <Link
+                  key={note.id}
+                  href={getNoteHref(note, Boolean(user))}
+                  className="group flex min-w-0 items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 transition hover:bg-[var(--surface-hover)] sm:gap-4 sm:p-5"
+                >
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--card-soft)] text-[var(--primary)]">
+                    <FileText size={22} />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <h3 className="line-clamp-1 font-bold text-[var(--foreground)]">
+                      {note.title || "Untitled Note"}
+                    </h3>
+
+                    <p className="mt-1 line-clamp-1 text-sm text-[var(--muted)]">
+                      {note.subject || "Study material"}
+                      {note.class ? ` · Class ${note.class}` : ""}
+                    </p>
+
+                    <p className="mt-1 text-xs text-[var(--muted)]">
+                      {formatDate(note)}
+                    </p>
+                  </div>
+
+                  <ArrowRight
+                    size={17}
+                    className="shrink-0 text-[var(--muted)] transition group-hover:translate-x-0.5 group-hover:text-[var(--primary)]"
+                  />
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="mt-14">
+          <SectionHeading
+            eyebrow="Explore by subject"
+            title="Find your subject"
+            description="Start with a subject and discover relevant study resources."
+          />
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {subjectLinks.map((subject) => (
+              <Link
+                key={subject.name}
+                href={
+                  user
+                    ? `/browse?subject=${encodeURIComponent(subject.name)}`
+                    : "/signin"
+                }
+                className="group flex min-w-0 items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 transition hover:border-[var(--primary)]/40 hover:bg-[var(--surface-hover)] sm:p-5"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--card-soft)] text-[var(--primary)]">
+                  <GraduationCap size={21} />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <h3 className="truncate font-bold">
+                    {subject.name}
+                  </h3>
+
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    {subject.count > 0
+                      ? `${formatNumber(subject.count)} ${
+                          subject.count === 1
+                            ? "resource"
+                            : "resources"
+                        }`
+                      : "Explore resources"}
+                  </p>
+                </div>
+
+                <ArrowRight
+                  size={15}
+                  className="shrink-0 text-[var(--muted)] transition group-hover:text-[var(--primary)]"
+                />
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-14 overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--panel)] p-6 sm:p-9 lg:p-12">
+          <div className="grid items-center gap-8 lg:grid-cols-[1fr_auto]">
+            <div>
+              <div className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-[var(--primary)]">
+                <TrendingUp size={18} />
+                Grow together
+              </div>
+
+              <h2 className="max-w-2xl text-3xl font-black tracking-tight sm:text-4xl">
+                Good notes are better when everyone can learn from them.
+              </h2>
+
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-[var(--muted)] sm:text-base">
+                Join the community, contribute useful study material,
+                and make learning resources easier to discover.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3 lg:justify-end">
+              <Link
+                href={user ? "/upload" : "/signup"}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-3.5 text-sm font-bold text-white transition hover:bg-[var(--primary-hover)]"
+              >
+                Join the community
+                <ArrowRight size={17} />
+              </Link>
+
+              <Link
+                href={user ? "/browse" : "/signin"}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-5 py-3.5 text-sm font-bold transition hover:bg-[var(--surface-hover)]"
+              >
+                Explore library
+              </Link>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
 }

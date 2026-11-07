@@ -43,7 +43,7 @@ export function getCreatorBadges(input: BadgeInput): CreatorBadge[] {
     {
       id: "verified_creator",
       title: "Verified Creator",
-      description: "Trusted NotesWallah creator.",
+      description: "Trusted Edukrate creator.",
       unlocked: input.approvedUploads >= 50 && input.totalLikes >= 100,
     },
     {

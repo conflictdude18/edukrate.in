@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -10,7 +11,13 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import { ArrowLeft, RefreshCw, UserRound, UserRoundCheck } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  RefreshCw,
+  UserRound,
+  UserRoundCheck,
+} from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 
 import { db } from "@/firebase/firebase";
@@ -61,15 +68,17 @@ export default function FollowingPage() {
                   userData.displayName ||
                   userData.name ||
                   followData.followingName ||
-                  "NotesWallah User",
-                followingAvatar: userData.avatarUrl || userData.photoURL || "",
+                  "Edukrate User",
+                followingAvatar:
+                  userData.avatarUrl || userData.photoURL || "",
               };
             }
 
             return {
               id: followDoc.id,
               followingId,
-              followingName: followData.followingName || "NotesWallah User",
+              followingName:
+                followData.followingName || "Edukrate User",
               followingAvatar: "",
             };
           })
@@ -88,95 +97,158 @@ export default function FollowingPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#050505] px-4 py-8 text-white">
-        <div className="mx-auto flex min-h-[70vh] max-w-5xl items-center justify-center">
-          <div className="text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-white/10 bg-white/5">
-              <RefreshCw className="animate-spin text-red-500" size={30} />
-            </div>
-
-            <h1 className="mt-5 text-xl font-black">Loading following</h1>
-
-            <p className="mt-2 text-sm text-white/50">
-              Fetching contributors this user follows...
-            </p>
+      <main className="flex min-h-[75vh] w-full items-center justify-center px-4 text-[var(--foreground)]">
+        <div className="text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-[var(--border)] bg-[var(--card)]">
+            <RefreshCw
+              className="animate-spin text-red-500"
+              size={30}
+            />
           </div>
+
+          <h1 className="mt-5 text-xl font-black">
+            Loading following
+          </h1>
+
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            Fetching contributors this user follows...
+          </p>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#050505] px-4 py-6 text-white sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-5xl pb-28 md:pb-10">
+    <main className="w-full min-w-0 overflow-x-hidden px-1 py-3 text-[var(--foreground)] sm:px-2 lg:px-3">
+      <div className="w-full min-w-0 pb-28 md:pb-10">
+        {/* Back navigation */}
         <button
           onClick={() => router.back()}
-          className="mb-5 inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-white/60 transition hover:text-white"
+          className="mb-5 inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2.5 text-sm font-bold text-[var(--muted-strong)] transition hover:border-red-500/30 hover:text-red-500"
         >
           <ArrowLeft size={16} />
           Back
         </button>
 
-        <section className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-br from-white/10 via-white/[0.04] to-red-500/10 p-5 shadow-2xl shadow-black/30 sm:p-7">
-          <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-red-500/20 blur-3xl" />
+        {/* Hero section */}
+        <section className="relative isolate overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)]">
+          <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,rgba(220,38,38,0.15),transparent_50%)]" />
 
-          <div className="relative flex items-center gap-4">
-            <div className="rounded-3xl bg-red-500/10 p-3 text-red-500 ring-1 ring-red-500/20">
-              <UserRoundCheck size={26} />
+          <div className="pointer-events-none absolute -right-16 -top-20 -z-10 h-64 w-64 rounded-full bg-red-500/10 blur-3xl" />
+
+          <div className="flex flex-col gap-6 p-5 sm:p-7 lg:flex-row lg:items-center lg:justify-between lg:p-9">
+            <div className="flex min-w-0 items-center gap-4 sm:gap-6">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10 text-red-500 sm:h-20 sm:w-20 sm:rounded-3xl">
+                <UserRoundCheck size={34} />
+              </div>
+
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-red-500">
+                  Student Network
+                </p>
+
+                <h1 className="mt-1 text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
+                  Following
+                </h1>
+
+                <p className="mt-2 text-sm text-[var(--muted)] sm:text-base">
+                  Contributors followed by this user.
+                </p>
+              </div>
             </div>
 
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-red-300">
-                Student Network
-              </p>
-              <h1 className="mt-1 text-3xl font-black">Following</h1>
-              <p className="mt-1 text-sm text-white/50">
-                {following.length} contributors followed by this user.
-              </p>
+            <div className="flex items-center gap-4 rounded-2xl border border-[var(--border)] bg-[var(--background)] p-4 sm:min-w-48 sm:p-5">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+                <UserRoundCheck size={23} />
+              </div>
+
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
+                  Total Following
+                </p>
+                <p className="mt-1 text-3xl font-black tabular-nums">
+                  {following.length.toLocaleString()}
+                </p>
+              </div>
             </div>
           </div>
         </section>
 
-        {following.length === 0 ? (
-          <section className="mt-5 rounded-[2rem] border border-white/10 bg-white/[0.04] p-8 text-center shadow-2xl shadow-black/20 sm:p-12">
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-[1.5rem] border border-red-500/20 bg-red-500/10 text-red-300">
-              <UserRound size={38} />
+        {/* Following list */}
+        <section className="mt-7">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-red-500">
+                Community
+              </p>
+
+              <h2 className="mt-1 text-2xl font-black">
+                Following Contributors
+              </h2>
+
+              <p className="mt-1 text-sm text-[var(--muted)]">
+                Open a profile to view more details.
+              </p>
             </div>
 
-            <h2 className="mt-7 text-2xl font-black">
-              Not following anyone yet
-            </h2>
+            <span className="w-fit rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-xs font-bold text-[var(--muted-strong)]">
+              {following.length}{" "}
+              {following.length === 1 ? "Person" : "People"}
+            </span>
+          </div>
 
-            <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-white/55">
-              Contributors followed by this user will appear here.
-            </p>
-          </section>
-        ) : (
-          <section className="mt-5 grid gap-4 md:grid-cols-2">
-            {following.map((item) => (
-              <Link
-                key={item.id}
-                href={`/profile/${item.followingId}`}
-                className="group flex items-center gap-4 rounded-[1.6rem] border border-white/10 bg-white/[0.04] p-4 shadow-2xl shadow-black/20 transition hover:border-red-500/30 hover:bg-white/[0.06] sm:p-5"
-              >
-                <UserAvatar
-                  name={item.followingName}
-                  src={item.followingAvatar || ""}
-                  size="md"
-                />
+          {following.length === 0 ? (
+            <section className="mt-5 flex min-h-[320px] flex-col items-center justify-center rounded-3xl border border-dashed border-[var(--border)] bg-[var(--card)] px-6 py-12 text-center">
+              <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-red-500/20 bg-red-500/10 text-red-500">
+                <UserRound size={38} />
+              </div>
 
-                <div className="min-w-0 flex-1">
-                  <h2 className="truncate text-base font-black sm:text-lg">
-                    {item.followingName}
-                  </h2>
-                  <p className="mt-1 text-sm font-semibold text-white/45">
-                    View profile
-                  </p>
-                </div>
-              </Link>
-            ))}
-          </section>
-        )}
+              <h2 className="mt-6 text-2xl font-black">
+                Not following anyone yet
+              </h2>
+
+              <p className="mx-auto mt-2 max-w-md text-sm leading-7 text-[var(--muted)]">
+                Contributors followed by this user will appear here.
+              </p>
+            </section>
+          ) : (
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              {following.map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/profile/${item.followingId}`}
+                  className="group flex min-w-0 items-center gap-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 transition duration-200 hover:-translate-y-0.5 hover:border-red-500/40 hover:shadow-lg hover:shadow-red-500/5 sm:p-5"
+                >
+                  <div className="shrink-0 rounded-2xl border border-[var(--border)] bg-[var(--card-soft)] p-1">
+                    <UserAvatar
+                      name={item.followingName}
+                      src={item.followingAvatar || ""}
+                      size="md"
+                    />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate text-base font-black text-[var(--foreground)] transition group-hover:text-red-500 sm:text-lg">
+                      {item.followingName}
+                    </h3>
+
+                    <p className="mt-1 text-xs font-semibold text-[var(--muted)] sm:text-sm">
+                      Edukrate Member
+                    </p>
+
+                    <span className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-red-500">
+                      View Profile
+                      <ArrowRight
+                        size={14}
+                        className="transition group-hover:translate-x-1"
+                      />
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </main>
   );

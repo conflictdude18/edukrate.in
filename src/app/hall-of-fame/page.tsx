@@ -1,5 +1,7 @@
+
 "use client";
 
+import type React from "react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
@@ -14,6 +16,8 @@ import {
   Sparkles,
   Trophy,
   UploadCloud,
+  Users,
+  Star,
 } from "lucide-react";
 
 import { db } from "@/firebase/firebase";
@@ -46,6 +50,14 @@ function getScore(creator: HallCreator) {
   );
 }
 
+function getUnlockedBadges(creator: HallCreator) {
+  return creator.badges.filter((badge) => badge.unlocked).length;
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("en-IN").format(value);
+}
+
 export default function HallOfFamePage() {
   const [creators, setCreators] = useState<HallCreator[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +72,7 @@ export default function HallOfFamePage() {
 
           return {
             userId: value.userId || item.id,
-            displayName: value.displayName || "NotesWallah Creator",
+            displayName: value.displayName || "Edukrate Creator",
             photoURL: value.photoURL || "",
             approvedUploads: Number(value.approvedUploads || 0),
             totalDownloads: Number(value.totalDownloads || 0),
@@ -83,49 +95,67 @@ export default function HallOfFamePage() {
     fetchCreators();
   }, []);
 
-  const legends = useMemo(() => {
-    return [...creators].sort((a, b) => getScore(b) - getScore(a)).slice(0, 10);
-  }, [creators]);
+  const legends = useMemo(
+    () =>
+      [...creators]
+        .sort((a, b) => getScore(b) - getScore(a))
+        .slice(0, 10),
+    [creators]
+  );
 
-  const downloadKings = useMemo(() => {
-    return [...creators]
-      .sort((a, b) => b.totalDownloads - a.totalDownloads)
-      .slice(0, 5);
-  }, [creators]);
+  const downloadKings = useMemo(
+    () =>
+      [...creators]
+        .sort((a, b) => b.totalDownloads - a.totalDownloads)
+        .slice(0, 5),
+    [creators]
+  );
 
-  const uploadMasters = useMemo(() => {
-    return [...creators]
-      .sort((a, b) => b.approvedUploads - a.approvedUploads)
-      .slice(0, 5);
-  }, [creators]);
+  const uploadMasters = useMemo(
+    () =>
+      [...creators]
+        .sort((a, b) => b.approvedUploads - a.approvedUploads)
+        .slice(0, 5),
+    [creators]
+  );
 
-  const streakChampions = useMemo(() => {
-    return [...creators]
-      .sort((a, b) => b.bestUploadStreak - a.bestUploadStreak)
-      .slice(0, 5);
-  }, [creators]);
+  const streakChampions = useMemo(
+    () =>
+      [...creators]
+        .sort((a, b) => b.bestUploadStreak - a.bestUploadStreak)
+        .slice(0, 5),
+    [creators]
+  );
 
-  const badgeCollectors = useMemo(() => {
-    return [...creators]
-      .sort(
-        (a, b) =>
-          b.badges.filter((badge) => badge.unlocked).length -
-          a.badges.filter((badge) => badge.unlocked).length
-      )
-      .slice(0, 5);
-  }, [creators]);
+  const badgeCollectors = useMemo(
+    () =>
+      [...creators]
+        .sort((a, b) => getUnlockedBadges(b) - getUnlockedBadges(a))
+        .slice(0, 5),
+    [creators]
+  );
+
+  const totalUploads = creators.reduce(
+    (sum, creator) => sum + creator.approvedUploads,
+    0
+  );
+
+  const totalDownloads = creators.reduce(
+    (sum, creator) => sum + creator.totalDownloads,
+    0
+  );
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#050505] px-4 py-8 text-white">
-        <div className="mx-auto flex min-h-[70vh] max-w-7xl items-center justify-center">
+      <main className="min-h-screen w-full bg-[var(--background)] px-3 py-8 text-[var(--foreground)] sm:px-5 lg:px-7">
+        <div className="flex min-h-[70vh] items-center justify-center">
           <div className="text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-white/10 bg-white/5">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-[var(--border)] bg-[var(--card)]">
               <RefreshCw className="animate-spin text-red-500" size={30} />
             </div>
             <h1 className="mt-5 text-xl font-black">Loading Hall of Fame</h1>
-            <p className="mt-2 text-sm text-white/50">
-              Ranking NotesWallah creators...
+            <p className="mt-2 text-sm text-[var(--muted)]">
+              Ranking Edukrate creators...
             </p>
           </div>
         </div>
@@ -134,88 +164,132 @@ export default function HallOfFamePage() {
   }
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#050505] px-4 py-6 text-white sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl pb-28 md:pb-10">
-        <section className="relative overflow-hidden rounded-[2rem] border border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 via-white/[0.04] to-red-500/10 p-5 shadow-2xl shadow-black/30 sm:p-7 lg:p-9">
-          <div className="absolute -right-10 -top-10 h-44 w-44 rounded-full bg-yellow-500/20 blur-3xl" />
+    <main className="min-h-screen w-full overflow-x-hidden bg-[var(--background)] px-3 py-5 text-[var(--foreground)] sm:px-5 lg:px-7 xl:px-9">
+      <div className="w-full space-y-6 pb-28 md:pb-10">
+        {/* HERO */}
+        <section className="relative isolate overflow-hidden rounded-[2rem] border border-yellow-500/20 bg-[var(--panel)] shadow-xl">
+          <div className="absolute inset-0 -z-10 bg-gradient-to-br from-yellow-500/15 via-transparent to-red-600/10" />
+          <div className="absolute -right-20 -top-24 -z-10 h-80 w-80 rounded-full bg-yellow-500/15 blur-3xl" />
+          <div className="absolute -bottom-28 left-1/3 -z-10 h-72 w-72 rounded-full bg-red-600/10 blur-3xl" />
 
-          <div className="relative grid gap-7 lg:grid-cols-[1fr_360px] lg:items-end">
+          <div className="grid gap-8 p-5 sm:p-7 lg:grid-cols-[1fr_390px] lg:items-center lg:p-10">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-yellow-500/25 bg-yellow-500/10 px-4 py-2 text-xs font-black text-yellow-300">
+              <div className="inline-flex items-center gap-2 rounded-full border border-yellow-500/25 bg-yellow-500/10 px-4 py-2 text-xs font-black uppercase tracking-wider text-yellow-500">
                 <Trophy size={16} />
                 Creator Hall of Fame
               </div>
 
-              <h1 className="mt-5 text-4xl font-black tracking-tight sm:text-6xl">
-                NotesWallah Legends
+              <h1 className="mt-5 text-4xl font-black tracking-tight sm:text-5xl lg:text-6xl">
+                Edukrate
+                <span className="block bg-gradient-to-r from-yellow-500 via-amber-400 to-red-500 bg-clip-text text-transparent">
+                  Legends
+                </span>
               </h1>
 
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-white/55 sm:text-base">
-                The most consistent, helpful, and trusted creators on
-                NotesWallah.
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-[var(--muted)] sm:text-base">
+                Celebrating the most consistent, helpful, and trusted creators
+                on Edukrate. Every upload, download, achievement, and
+                contribution counts.
               </p>
+
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2 rounded-xl border border-yellow-500/20 bg-yellow-500/10 px-4 py-2.5 text-sm font-bold text-yellow-600 dark:text-yellow-300">
+                  <Sparkles size={16} />
+                  Top creator rankings
+                </div>
+                <Link
+                  href="/creators"
+                  className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-black text-white transition hover:bg-red-500"
+                >
+                  View Leaderboard
+                  <ArrowRight size={16} />
+                </Link>
+              </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              <HeroStat label="Creators" value={creators.length} />
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
               <HeroStat
-                label="Uploads"
-                value={creators.reduce(
-                  (sum, creator) => sum + creator.approvedUploads,
-                  0
-                )}
+                icon={<Users size={18} />}
+                label="Creators"
+                value={creators.length}
               />
               <HeroStat
+                icon={<UploadCloud size={18} />}
+                label="Uploads"
+                value={totalUploads}
+              />
+              <HeroStat
+                icon={<Download size={18} />}
                 label="Downloads"
-                value={creators.reduce(
-                  (sum, creator) => sum + creator.totalDownloads,
-                  0
-                )}
+                value={totalDownloads}
               />
             </div>
           </div>
         </section>
 
         {creators.length === 0 ? (
-          <section className="mt-5 rounded-[2rem] border border-white/10 bg-white/[0.04] p-8 text-center shadow-2xl shadow-black/20">
-            <Trophy className="mx-auto text-white/35" size={46} />
+          <section className="rounded-[2rem] border border-[var(--border)] bg-[var(--card)] p-10 text-center">
+            <Trophy className="mx-auto text-[var(--muted)]" size={48} />
             <h2 className="mt-5 text-2xl font-black">No legends yet</h2>
-            <p className="mt-2 text-sm text-white/50">
+            <p className="mt-2 text-sm text-[var(--muted)]">
               Creators will appear after they upload approved notes.
             </p>
           </section>
         ) : (
           <>
-            <section className="mt-5 grid gap-4 lg:grid-cols-3">
-              {legends.slice(0, 3).map((creator, index) => (
-                <TopLegendCard
-                  key={creator.userId}
-                  creator={creator}
-                  rank={index + 1}
-                />
-              ))}
+            {/* TOP THREE */}
+            <section>
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-yellow-500/10 text-yellow-500">
+                  <Crown size={21} />
+                </div>
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.2em] text-yellow-600 dark:text-yellow-400">
+                    The best of the best
+                  </p>
+                  <h2 className="text-xl font-black sm:text-2xl">
+                    Top Three Legends
+                  </h2>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                {legends.slice(0, 3).map((creator, index) => (
+                  <TopLegendCard
+                    key={creator.userId}
+                    creator={creator}
+                    rank={index + 1}
+                  />
+                ))}
+              </div>
             </section>
 
-            <section className="mt-5 rounded-[2rem] border border-white/10 bg-white/[0.04] p-5 shadow-2xl shadow-black/20 sm:p-6">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            {/* OVERALL LEADERBOARD */}
+            <section className="overflow-hidden rounded-[2rem] border border-[var(--border)] bg-[var(--card)]">
+              <div className="flex flex-col gap-4 border-b border-[var(--border)] p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6 lg:p-7">
                 <div>
-                  <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-yellow-300">
-                    <Crown size={15} />
+                  <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-yellow-600 dark:text-yellow-400">
+                    <Trophy size={15} />
                     Overall Ranking
                   </p>
-                  <h2 className="mt-2 text-2xl font-black">Top Legends</h2>
+                  <h2 className="mt-2 text-2xl font-black sm:text-3xl">
+                    Top Legends
+                  </h2>
+                  <p className="mt-1 text-sm text-[var(--muted)]">
+                    Ranked by total creator score
+                  </p>
                 </div>
 
                 <Link
                   href="/creators"
-                  className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.05] px-4 py-3 text-sm font-black text-white/75 transition hover:bg-white/[0.08] hover:text-white"
+                  className="inline-flex w-fit items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card-soft)] px-4 py-3 text-sm font-black transition hover:border-red-500/40 hover:text-red-500"
                 >
                   Full Leaderboard
                   <ArrowRight size={16} />
                 </Link>
               </div>
 
-              <div className="mt-5 grid gap-3">
+              <div className="space-y-2 p-3 sm:p-5 lg:p-6">
                 {legends.map((creator, index) => (
                   <CreatorRow
                     key={creator.userId}
@@ -223,45 +297,63 @@ export default function HallOfFamePage() {
                     rank={index + 1}
                     value={getScore(creator)}
                     valueLabel="Score"
+                    featured={index === 0}
                   />
                 ))}
               </div>
             </section>
 
-            <section className="mt-5 grid gap-5 lg:grid-cols-2">
-              <RankingPanel
-                title="Download Kings"
-                icon={<Download size={16} />}
-                creators={downloadKings}
-                valueLabel="Downloads"
-                getValue={(creator) => creator.totalDownloads}
-              />
+            {/* CATEGORY RANKINGS */}
+            <section>
+              <div className="mb-4">
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-red-500">
+                  Creator achievements
+                </p>
+                <h2 className="mt-1 text-2xl font-black sm:text-3xl">
+                  Category Champions
+                </h2>
+                <p className="mt-1 text-sm text-[var(--muted)]">
+                  Leaders across different creator milestones.
+                </p>
+              </div>
 
-              <RankingPanel
-                title="Upload Masters"
-                icon={<UploadCloud size={16} />}
-                creators={uploadMasters}
-                valueLabel="Approved"
-                getValue={(creator) => creator.approvedUploads}
-              />
+              <div className="grid gap-4 xl:grid-cols-2">
+                <RankingPanel
+                  title="Download Kings"
+                  subtitle="Most downloaded notes"
+                  icon={<Download size={18} />}
+                  creators={downloadKings}
+                  valueLabel="Downloads"
+                  getValue={(creator) => creator.totalDownloads}
+                />
 
-              <RankingPanel
-                title="Streak Champions"
-                icon={<Flame size={16} />}
-                creators={streakChampions}
-                valueLabel="Best Streak"
-                getValue={(creator) => creator.bestUploadStreak}
-              />
+                <RankingPanel
+                  title="Upload Masters"
+                  subtitle="Most approved uploads"
+                  icon={<UploadCloud size={18} />}
+                  creators={uploadMasters}
+                  valueLabel="Approved"
+                  getValue={(creator) => creator.approvedUploads}
+                />
 
-              <RankingPanel
-                title="Badge Collectors"
-                icon={<Award size={16} />}
-                creators={badgeCollectors}
-                valueLabel="Badges"
-                getValue={(creator) =>
-                  creator.badges.filter((badge) => badge.unlocked).length
-                }
-              />
+                <RankingPanel
+                  title="Streak Champions"
+                  subtitle="Longest upload streaks"
+                  icon={<Flame size={18} />}
+                  creators={streakChampions}
+                  valueLabel="Best Streak"
+                  getValue={(creator) => creator.bestUploadStreak}
+                />
+
+                <RankingPanel
+                  title="Badge Collectors"
+                  subtitle="Most unlocked achievements"
+                  icon={<Award size={18} />}
+                  creators={badgeCollectors}
+                  valueLabel="Badges"
+                  getValue={getUnlockedBadges}
+                />
+              </div>
             </section>
           </>
         )}
@@ -277,41 +369,69 @@ function TopLegendCard({
   creator: HallCreator;
   rank: number;
 }) {
-  const unlockedBadges = creator.badges.filter((badge) => badge.unlocked);
+  const isFirst = rank === 1;
 
   return (
     <Link
       href={`/profile/${creator.userId}`}
-      className="group rounded-[2rem] border border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 via-white/[0.04] to-red-500/10 p-5 shadow-2xl shadow-black/20 transition hover:border-yellow-400/40 sm:p-6"
+      className={`group relative flex min-w-0 flex-col overflow-hidden rounded-[2rem] border bg-[var(--card)] p-5 transition duration-300 hover:-translate-y-1 hover:shadow-xl sm:p-6 ${
+        isFirst
+          ? "border-yellow-500/35 shadow-lg shadow-yellow-500/5"
+          : "border-[var(--border)] hover:border-yellow-500/30"
+      }`}
     >
-      <div className="flex items-start justify-between gap-4">
-        <UserAvatar
-          name={creator.displayName}
-          src={creator.photoURL || ""}
-          size="lg"
-        />
+      <div
+        className={`absolute inset-x-0 top-0 h-1 ${
+          rank === 1
+            ? "bg-yellow-500"
+            : rank === 2
+              ? "bg-zinc-400"
+              : "bg-amber-700"
+        }`}
+      />
 
-        <div className="rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-xs font-black text-yellow-300">
-          #{rank}
+      <div className="flex items-start justify-between gap-4">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-soft)] p-1">
+          <UserAvatar
+            name={creator.displayName}
+            src={creator.photoURL || ""}
+            size="lg"
+          />
+        </div>
+
+        <div
+          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-black ${
+            rank === 1
+              ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-600 dark:text-yellow-300"
+              : "border-[var(--border)] bg-[var(--card-soft)] text-[var(--muted-strong)]"
+          }`}
+        >
+          {rank === 1 ? <Crown size={14} /> : <Medal size={14} />}
+          Rank #{rank}
         </div>
       </div>
 
-      <h2 className="mt-5 line-clamp-1 text-xl font-black">
-        {creator.displayName}
-      </h2>
-
-      <p className="mt-1 text-xs font-black text-yellow-300">
-        Level {creator.creatorLevel?.level || 1} ·{" "}
-        {creator.creatorLevel?.title || "Starter"}
-      </p>
-
-      <div className="mt-5 grid grid-cols-2 gap-3">
-        <MiniStat label="Score" value={getScore(creator)} />
-        <MiniStat label="Badges" value={unlockedBadges.length} />
+      <div className="mt-5">
+        <h3 className="truncate text-xl font-black sm:text-2xl">
+          {creator.displayName}
+        </h3>
+        <p className="mt-1 text-sm font-bold text-yellow-600 dark:text-yellow-400">
+          Level {creator.creatorLevel?.level || 1} ·{" "}
+          {creator.creatorLevel?.title || "Starter"}
+        </p>
       </div>
 
-      <div className="mt-5 rounded-2xl bg-red-600 px-5 py-3 text-center text-sm font-black text-white transition group-hover:bg-red-500">
-        View Profile
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        <MiniStat label="Creator Score" value={getScore(creator)} />
+        <MiniStat label="Badges" value={getUnlockedBadges(creator)} />
+      </div>
+
+      <div className="mt-5 flex items-center justify-between rounded-xl bg-red-600 px-4 py-3 text-sm font-black text-white transition group-hover:bg-red-500">
+        View Creator Profile
+        <ArrowRight
+          size={17}
+          className="transition group-hover:translate-x-1"
+        />
       </div>
     </Link>
   );
@@ -319,27 +439,32 @@ function TopLegendCard({
 
 function RankingPanel({
   title,
+  subtitle,
   icon,
   creators,
   valueLabel,
   getValue,
 }: {
   title: string;
+  subtitle: string;
   icon: React.ReactNode;
   creators: HallCreator[];
   valueLabel: string;
   getValue: (creator: HallCreator) => number;
 }) {
   return (
-    <section className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-5 shadow-2xl shadow-black/20 sm:p-6">
-      <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-red-300">
-        {icon}
-        Hall Category
-      </p>
+    <section className="min-w-0 overflow-hidden rounded-[1.8rem] border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 lg:p-6">
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <h2 className="text-lg font-black sm:text-xl">{title}</h2>
+          <p className="text-xs text-[var(--muted)]">{subtitle}</p>
+        </div>
+      </div>
 
-      <h2 className="mt-2 text-2xl font-black">{title}</h2>
-
-      <div className="mt-5 grid gap-3">
+      <div className="mt-5 grid gap-2">
         {creators.map((creator, index) => (
           <CreatorRow
             key={creator.userId}
@@ -359,19 +484,35 @@ function CreatorRow({
   rank,
   value,
   valueLabel,
+  featured = false,
 }: {
   creator: HallCreator;
   rank: number;
   value: number;
   valueLabel: string;
+  featured?: boolean;
 }) {
   return (
     <Link
       href={`/profile/${creator.userId}`}
-      className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 p-4 transition hover:border-red-500/30 hover:bg-white/[0.05]"
+      className={`flex min-w-0 items-center gap-3 rounded-2xl border p-3 transition sm:gap-4 sm:p-4 ${
+        featured
+          ? "border-yellow-500/25 bg-yellow-500/[0.06] hover:border-yellow-500/40"
+          : "border-[var(--border)] bg-[var(--panel)] hover:border-red-500/30 hover:bg-[var(--surface-hover)]"
+      }`}
     >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-yellow-500/10 text-yellow-300">
-        {rank <= 3 ? <Medal size={20} /> : <span className="text-sm font-black">#{rank}</span>}
+      <div
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+          rank <= 3
+            ? "bg-yellow-500/10 text-yellow-500"
+            : "bg-[var(--card-soft)] text-[var(--muted)]"
+        }`}
+      >
+        {rank <= 3 ? (
+          <Medal size={19} />
+        ) : (
+          <span className="text-xs font-black">#{rank}</span>
+        )}
       </div>
 
       <UserAvatar
@@ -381,39 +522,64 @@ function CreatorRow({
       />
 
       <div className="min-w-0 flex-1">
-        <h3 className="line-clamp-1 text-sm font-black">
+        <h3 className="truncate text-sm font-black sm:text-base">
           {creator.displayName}
         </h3>
-        <p className="mt-1 text-xs font-semibold text-white/40">
+        <p className="mt-1 truncate text-xs font-semibold text-[var(--muted)]">
           Level {creator.creatorLevel?.level || 1} ·{" "}
           {creator.creatorLevel?.title || "Starter"}
         </p>
       </div>
 
-      <div className="text-right">
-        <p className="text-sm font-black">{value}</p>
-        <p className="text-[10px] font-bold text-white/35">{valueLabel}</p>
+      <div className="shrink-0 text-right">
+        <p className="text-sm font-black tabular-nums sm:text-base">
+          {formatNumber(value)}
+        </p>
+        <p className="mt-0.5 text-[10px] font-bold text-[var(--muted)] sm:text-xs">
+          {valueLabel}
+        </p>
       </div>
     </Link>
   );
 }
 
-function HeroStat({ label, value }: { label: string; value: number }) {
+function HeroStat({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+}) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/25 p-4 text-center">
-      <p className="text-xl font-black sm:text-2xl">{value}</p>
-      <p className="mt-1 text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
+    <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--card)]/70 p-3 text-center sm:p-4">
+      <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-xl bg-yellow-500/10 text-yellow-600 dark:text-yellow-300">
+        {icon}
+      </div>
+      <p className="mt-2 truncate text-lg font-black tabular-nums sm:text-2xl">
+        {formatNumber(value)}
+      </p>
+      <p className="mt-1 text-[9px] font-black uppercase tracking-wider text-[var(--muted)] sm:text-[10px]">
         {label}
       </p>
     </div>
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: number }) {
+function MiniStat({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
-      <p className="text-xl font-black">{value}</p>
-      <p className="mt-1 text-xs font-bold text-white/40">{label}</p>
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--panel)] p-3 sm:p-4">
+      <p className="text-xl font-black tabular-nums">
+        {formatNumber(value)}
+      </p>
+      <p className="mt-1 text-xs font-bold text-[var(--muted)]">{label}</p>
     </div>
   );
 }

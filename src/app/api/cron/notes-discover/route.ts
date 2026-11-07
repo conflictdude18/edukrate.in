@@ -1,3 +1,4 @@
+
 import { NextRequest, NextResponse } from "next/server";
 import { enqueuePdf } from "@/lib/notes-import/queue";
 
@@ -76,27 +77,32 @@ export async function GET(request: NextRequest) {
 
   for (const query of selectedQueries) {
     try {
-      const response = await fetch("https://api.tavily.com/search", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          api_key: apiKey,
-          query,
-          max_results: 8,
-          search_depth: "basic",
-          include_raw_content: false,
-        }),
-        signal: AbortSignal.timeout(15000),
-      });
+      const response = await fetch(
+        "https://api.tavily.com/search",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            api_key: apiKey,
+            query,
+            max_results: 8,
+            search_depth: "basic",
+            include_raw_content: false,
+          }),
+          signal: AbortSignal.timeout(15000),
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`Tavily returned ${response.status}`);
       }
 
       const data = await response.json();
-      const results = Array.isArray(data.results) ? data.results : [];
+      const results = Array.isArray(data.results)
+        ? data.results
+        : [];
 
       for (const item of results) {
         if (!isPdfCandidate(item)) continue;
@@ -123,6 +129,7 @@ export async function GET(request: NextRequest) {
         error instanceof Error ? error.message : "Search failed";
 
       errors.push(message);
+
       console.error("[notes-discover] Search failed", {
         query,
         error: message,

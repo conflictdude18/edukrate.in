@@ -1,3 +1,4 @@
+
 "use client";
 
 import type React from "react";
@@ -6,7 +7,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AchievementBadge from "@/components/AchievementBadge";
 import { updateUserAchievements } from "@/lib/updateUserAchievements";
-import AchievementProgress from "@/components/AchievementProgress";
 import {
   Activity,
   ArrowRight,
@@ -56,11 +56,11 @@ type UserProfile = {
   achievements?: string[];
   createdAt?: unknown;
   achievementStats?: {
-  approvedNotes?: number;
-  totalDownloads?: number;
-  totalViews?: number;
-  totalLikes?: number;
-};
+    approvedNotes?: number;
+    totalDownloads?: number;
+    totalViews?: number;
+    totalLikes?: number;
+  };
 };
 
 type CreatorNote = Note & {
@@ -81,7 +81,6 @@ export default function ProfilePage() {
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [fetching, setFetching] = useState(true);
-
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [uploadedNotes, setUploadedNotes] = useState<CreatorNote[]>([]);
@@ -144,21 +143,25 @@ export default function ProfilePage() {
     if (user) fetchProfile();
   }, [user]);
 
-  const approvedNotes = useMemo(() => {
-    return uploadedNotes.filter((note) => note.status === "approved");
-  }, [uploadedNotes]);
+  const approvedNotes = useMemo(
+    () => uploadedNotes.filter((note) => note.status === "approved"),
+    [uploadedNotes]
+  );
 
-  const totalDownloads = useMemo(() => {
-    return uploadedNotes.reduce((total, note) => total + getDownloads(note), 0);
-  }, [uploadedNotes]);
+  const totalDownloads = useMemo(
+    () => uploadedNotes.reduce((total, note) => total + getDownloads(note), 0),
+    [uploadedNotes]
+  );
 
-  const totalLikes = useMemo(() => {
-    return uploadedNotes.reduce((total, note) => total + getNumber(note.likes), 0);
-  }, [uploadedNotes]);
+  const totalLikes = useMemo(
+    () => uploadedNotes.reduce((total, note) => total + getNumber(note.likes), 0),
+    [uploadedNotes]
+  );
 
-  const totalViews = useMemo(() => {
-    return uploadedNotes.reduce((total, note) => total + getNumber(note.views), 0);
-  }, [uploadedNotes]);
+  const totalViews = useMemo(
+    () => uploadedNotes.reduce((total, note) => total + getNumber(note.views), 0),
+    [uploadedNotes]
+  );
 
   const topSubjects = useMemo(() => {
     const subjectMap = new Map<string, number>();
@@ -173,35 +176,40 @@ export default function ProfilePage() {
       .slice(0, 5);
   }, [uploadedNotes]);
 
-  const latestNotes = useMemo(() => {
-    return [...uploadedNotes]
-      .sort((a, b) => getCreatedTime(b.createdAt) - getCreatedTime(a.createdAt))
-      .slice(0, 3);
-  }, [uploadedNotes]);
+  const latestNotes = useMemo(
+    () =>
+      [...uploadedNotes]
+        .sort(
+          (a, b) =>
+            getCreatedTime(b.createdAt) - getCreatedTime(a.createdAt)
+        )
+        .slice(0, 3),
+    [uploadedNotes]
+  );
 
-  const topNotes = useMemo(() => {
-    return [...uploadedNotes]
-      .sort((a, b) => getCreatorScore(b) - getCreatorScore(a))
-      .slice(0, 3);
-  }, [uploadedNotes]);
+  const topNotes = useMemo(
+    () =>
+      [...uploadedNotes]
+        .sort((a, b) => getCreatorScore(b) - getCreatorScore(a))
+        .slice(0, 3),
+    [uploadedNotes]
+  );
 
   const bestNote = topNotes[0];
 
   if (loading || fetching) {
     return (
-        <div className="flex min-h-[70vh] items-center justify-center text-white">
-          <div className="text-center">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-white/10 bg-white/5">
-              <RefreshCw className="animate-spin text-red-500" size={30} />
-            </div>
-
-            <h1 className="mt-5 text-xl font-black">Loading profile</h1>
-
-            <p className="mt-2 text-sm text-white/50">
-              Fetching your creator stats...
-            </p>
+      <div className="flex min-h-[70vh] items-center justify-center px-4 text-[var(--foreground)]">
+        <div className="text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl border border-[var(--border)] bg-[var(--card)]">
+            <RefreshCw className="animate-spin text-red-500" size={30} />
           </div>
+          <h1 className="mt-5 text-xl font-black">Loading profile</h1>
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            Fetching your creator stats...
+          </p>
         </div>
+      </div>
     );
   }
 
@@ -224,220 +232,322 @@ export default function ProfilePage() {
         : "New Creator";
 
   const achievements = profile?.achievements || [];
-  const achievementStats = profile?.achievementStats || {};
 
   return (
-      <div className="space-y-5 pb-28 text-white md:pb-10">
-        <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035] p-4 sm:p-6 lg:p-7">
+    <div className="w-full min-w-0 space-y-6 px-1 pb-28 text-[var(--foreground)] sm:px-2 lg:px-3 md:pb-10">
+      {/* Profile hero */}
+      <section className="relative isolate overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)]">
+        <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top_right,rgba(220,38,38,0.13),transparent_48%)]" />
+        <div className="pointer-events-none absolute -right-20 -top-24 -z-10 h-72 w-72 rounded-full bg-red-500/[0.07] blur-3xl" />
 
-          <div className="relative">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-              <div className="flex min-w-0 items-center gap-4 sm:gap-5">
+        <div className="p-5 sm:p-7 lg:p-9">
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex min-w-0 items-center gap-4 sm:gap-6">
+              <div className="shrink-0 rounded-[28px] border border-[var(--border)] bg-[var(--card-soft)] p-1.5 shadow-xl">
                 <UserAvatar name={displayName} src={avatarUrl} size="lg" />
-
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h1 className="line-clamp-1 text-3xl font-black sm:text-5xl">
-                      {displayName}
-                    </h1>
-
-                    {(profile?.verified || profile?.role === "admin") && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-blue-400/20 bg-blue-500/10 px-3 py-1 text-xs font-black text-blue-300">
-                        <ShieldCheck size={13} />
-                        Verified
-                      </span>
-                    )}
-                  </div>
-
-                  <p className="mt-1 truncate text-sm font-semibold text-white/50 sm:text-base">
-                    {profile?.occupation || "Student Creator"}
-                  </p>
-
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Badge icon={<Activity size={13} />} text="Active Profile" />
-                    <Badge icon={<Award size={13} />} text={creatorLevel} />
-                    <Badge
-                      icon={<ShieldCheck size={13} />}
-                      text={profile?.role === "admin" ? "Admin" : "User"}
-                    />
-                  </div>
-                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 sm:flex">
-                <Link
-                  href="/settings/profile"
-                  className="btn-primary"
-                >
-                  <Settings size={17} />
-                  Edit
-                </Link>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="max-w-full break-words text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
+                    {displayName}
+                  </h1>
 
-                <Link
-                  href={`/profile/${user?.uid}`}
-                  className="btn-secondary"
-                >
-                  <UserRound size={17} />
-                  Public
-                </Link>
+                  {(profile?.verified || profile?.role === "admin") && (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1 text-xs font-bold text-blue-500">
+                      <ShieldCheck size={14} />
+                      Verified
+                    </span>
+                  )}
+                </div>
+
+                <p className="mt-2 text-sm font-semibold text-[var(--muted)] sm:text-base">
+                  {profile?.occupation || "Student Creator"}
+                </p>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Badge icon={<Activity size={13} />} text="Active Profile" />
+                  <Badge icon={<Award size={13} />} text={creatorLevel} />
+                  <Badge
+                    icon={<ShieldCheck size={13} />}
+                    text={profile?.role === "admin" ? "Admin" : "User"}
+                  />
+                </div>
               </div>
             </div>
 
-            <p className="mt-5 rounded-2xl border border-white/10 bg-black/25 p-4 text-sm leading-7 text-white/65 lg:max-w-3xl">
-              {profile?.bio ||
-                "Add a bio from Settings so students can learn more about you and your uploads."}
-            </p>
+            <div className="grid grid-cols-2 gap-3 sm:flex sm:shrink-0">
+              <Link href="/settings/profile" className="btn-primary justify-center">
+                <Settings size={17} />
+                Edit Profile
+              </Link>
+              <Link
+                href={`/profile/${user?.uid}`}
+                className="btn-secondary justify-center"
+              >
+                <UserRound size={17} />
+                Public Profile
+              </Link>
+            </div>
+          </div>
+
+          <div className="mt-7 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+            <div className="min-w-0">
+              <p className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--muted)]">
+                About
+              </p>
+              <p className="max-w-4xl rounded-2xl border border-[var(--border)] bg-[var(--background)]/60 p-4 text-sm leading-7 text-[var(--muted-strong)]">
+                {profile?.bio ||
+                  "Add a bio from Settings so students can learn more about you and your uploads."}
+              </p>
+            </div>
 
             {topSubjects.length > 0 && (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {topSubjects.map(([subject, count]) => (
-                  <span
-                    key={subject}
-                    className="rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-xs font-bold text-red-200"
-                  >
-                    {subject} · {count}
-                  </span>
-                ))}
+              <div className="lg:max-w-sm">
+                <p className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--muted)]">
+                  Main Subjects
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {topSubjects.map(([subject, count]) => (
+                    <span
+                      key={subject}
+                      className="rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-500"
+                    >
+                      {subject} · {count}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+      {/* Statistics */}
+      <section>
+        <SectionHeading
+          eyebrow="Your activity"
+          title="Creator Overview"
+          subtitle="A snapshot of your profile and study material."
+        />
+
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
           <ProfileCard
             href={`/profile/${user?.uid}/followers`}
-            icon={<Users size={22} />}
+            icon={<Users size={21} />}
             label="Followers"
             value={followersCount}
           />
-
           <ProfileCard
             href={`/profile/${user?.uid}/following`}
-            icon={<UserPlus size={22} />}
+            icon={<UserPlus size={21} />}
             label="Following"
             value={followingCount}
           />
+          <InfoCard
+            icon={<UploadCloud size={21} />}
+            label="Uploads"
+            value={uploadedNotes.length}
+          />
+          <InfoCard
+            icon={<Download size={21} />}
+            label="Downloads"
+            value={totalDownloads}
+          />
+          <InfoCard
+            icon={<Heart size={21} />}
+            label="Likes"
+            value={totalLikes}
+          />
+          <InfoCard
+            icon={<Eye size={21} />}
+            label="Views"
+            value={totalViews}
+          />
+        </div>
+      </section>
 
-          <InfoCard icon={<UploadCloud size={22} />} label="Uploads" value={uploadedNotes.length} />
-          <InfoCard icon={<Download size={22} />} label="Downloads" value={totalDownloads} />
-          <InfoCard icon={<Heart size={22} />} label="Likes" value={totalLikes} />
-          <InfoCard icon={<Eye size={22} />} label="Views" value={totalViews} />
-        </section>
-
-        <section className="mt-5 rounded-3xl border border-white/10 bg-white/[0.04] p-5 sm:p-6">
-          <div className="mb-4">
-            <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-red-300">
-              <Award size={15} />
+      {/* Achievements */}
+      <section className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-7">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <SectionEyebrow icon={<Award size={15} />}>
               Creator Achievements
-            </p>
-
-            <h2 className="mt-2 text-xl font-black">Unlocked Badges</h2>
-
-            <p className="mt-1 text-sm text-white/45">
+            </SectionEyebrow>
+            <h2 className="mt-2 text-2xl font-black">Unlocked Badges</h2>
+            <p className="mt-1 text-sm text-[var(--muted)]">
               Earn badges by uploading helpful notes and supporting students.
             </p>
           </div>
 
+          <Link
+            href="/profile/achievements"
+            className="inline-flex w-fit items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2.5 text-sm font-bold text-red-500 transition hover:bg-red-500/15"
+          >
+            View Progress
+            <ArrowRight size={16} />
+          </Link>
+        </div>
+
         {achievements.length === 0 ? (
-          <EmptyBox text="No achievements unlocked yet. Upload approved notes to start earning badges." />
+          <div className="mt-5">
+            <EmptyBox text="No achievements unlocked yet. Upload approved notes to start earning badges." />
+          </div>
         ) : (
-          <>
-            <div className="flex flex-wrap gap-3">
-              {achievements.map((id) => (
-                <AchievementBadge key={id} id={id} />
-              ))}
-            </div>
-
-            <Link
-              href="/profile/achievements"
-              className="mt-4 inline-flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-500/15"
-            >
-              View Progress
-              <ArrowRight size={16} />
-            </Link>
-          </>
+          <div className="mt-6 flex flex-wrap gap-3">
+            {achievements.map((id) => (
+              <AchievementBadge key={id} id={id} />
+            ))}
+          </div>
         )}
-        </section>
+      </section>
 
-        <section className="mt-5 grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5  sm:p-6">
-            <div className="mb-5 flex items-center justify-between gap-3">
-              <div>
-                <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-red-300">
-                  <Flame size={15} />
-                  Creator Highlight
-                </p>
-                <h2 className="mt-2 text-xl font-black">Best Performing Note</h2>
-              </div>
-            </div>
+      {/* Highlight and account */}
+      <section className="grid gap-5 xl:grid-cols-[1.35fr_0.65fr]">
+        <div className="min-w-0 rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-7">
+          <SectionEyebrow icon={<Flame size={15} />}>
+            Creator Highlight
+          </SectionEyebrow>
+          <h2 className="mt-2 text-2xl font-black">Best Performing Note</h2>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Your strongest note based on downloads, likes and views.
+          </p>
 
+          <div className="mt-5">
             {bestNote ? (
               <NoteRow note={bestNote} />
             ) : (
               <EmptyBox text="Upload notes to see your best performing content here." />
             )}
           </div>
+        </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5  sm:p-6">
-            <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-red-300">
-              <Mail size={15} />
-              Account
+        <div className="min-w-0 rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-7">
+          <SectionEyebrow icon={<Mail size={15} />}>Account</SectionEyebrow>
+          <h2 className="mt-2 text-2xl font-black">Account Details</h2>
+
+          <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--background)] p-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
+              Email
             </p>
-
-            <div className="mt-5 rounded-2xl border border-white/10 bg-black/25 p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-white/40">
-                Email
-              </p>
-              <p className="mt-1 truncate text-sm font-bold text-white/80">
-                {user?.email || "No email"}
-              </p>
-            </div>
-
-            <div className="mt-3 rounded-2xl border border-white/10 bg-black/25 p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-white/40">
-                Approved Notes
-              </p>
-              <p className="mt-1 text-2xl font-black text-green-300">
-                {approvedNotes.length}
-              </p>
-            </div>
+            <p className="mt-2 break-all text-sm font-bold text-[var(--foreground)]">
+              {user?.email || "No email"}
+            </p>
           </div>
-        </section>
 
-        <section className="mt-5 rounded-3xl border border-white/10 bg-white/[0.04] p-5  sm:p-6">
-          <h2 className="text-xl font-black">Quick Actions</h2>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <QuickAction href="/my-notes" label="My Notes" />
-            <QuickAction href="/saved-notes" label="Saved Notes" />
-            <QuickAction href="/upload" label="Upload Notes" />
+          <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--background)] p-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
+              Approved Notes
+            </p>
+            <p className="mt-2 text-3xl font-black text-green-500">
+              {approvedNotes.length}
+            </p>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section className="mt-5 grid gap-5 lg:grid-cols-2">
-          <NotesPanel
-            title="Top Notes"
-            subtitle="Ranked by downloads, likes and views"
-            icon={<Award size={15} />}
-            notes={topNotes}
-            emptyText="Your top notes will appear here."
-          />
+      {/* Quick actions */}
+      <section className="rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-7">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <SectionEyebrow icon={<Sparkles size={15} />}>
+              Shortcuts
+            </SectionEyebrow>
+            <h2 className="mt-2 text-2xl font-black">Quick Actions</h2>
+          </div>
+          <p className="text-sm text-[var(--muted)]">
+            Manage your study material.
+          </p>
+        </div>
 
-          <NotesPanel
-            title="Latest Uploads"
-            subtitle="Recently uploaded study material"
-            icon={<Sparkles size={15} />}
-            notes={latestNotes}
-            emptyText="Your latest uploads will appear here."
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <QuickAction
+            href="/my-notes"
+            label="My Notes"
+            description="Manage your uploads"
+            icon={<BookOpen size={20} />}
           />
-        </section>
-      </div>
+          <QuickAction
+            href="/saved-notes"
+            label="Saved Notes"
+            description="Open your saved material"
+            icon={<Heart size={20} />}
+          />
+          <QuickAction
+            href="/upload"
+            label="Upload Notes"
+            description="Share new study material"
+            icon={<UploadCloud size={20} />}
+          />
+        </div>
+      </section>
+
+      {/* Note lists */}
+      <section className="grid gap-5 xl:grid-cols-2">
+        <NotesPanel
+          title="Top Notes"
+          subtitle="Ranked by downloads, likes and views"
+          icon={<Award size={15} />}
+          notes={topNotes}
+          emptyText="Your top notes will appear here."
+        />
+
+        <NotesPanel
+          title="Latest Uploads"
+          subtitle="Recently uploaded study material"
+          icon={<Sparkles size={15} />}
+          notes={latestNotes}
+          emptyText="Your latest uploads will appear here."
+        />
+      </section>
+    </div>
   );
 }
 
-function Badge({ icon, text }: { icon: React.ReactNode; text: string }) {
+function SectionHeading({
+  eyebrow,
+  title,
+  subtitle,
+}: {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+}) {
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-green-500/20 bg-green-500/10 px-3 py-1 text-xs font-black text-green-300">
+    <div>
+      <p className="text-xs font-black uppercase tracking-[0.2em] text-red-500">
+        {eyebrow}
+      </p>
+      <h2 className="mt-1 text-2xl font-black tracking-tight">{title}</h2>
+      <p className="mt-1 text-sm text-[var(--muted)]">{subtitle}</p>
+    </div>
+  );
+}
+
+function SectionEyebrow({
+  icon,
+  children,
+}: {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-red-500">
+      {icon}
+      {children}
+    </p>
+  );
+}
+
+function Badge({
+  icon,
+  text,
+}: {
+  icon: React.ReactNode;
+  text: string;
+}) {
+  return (
+    <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--background)] px-3 py-1.5 text-xs font-bold text-[var(--muted-strong)]">
       {icon}
       {text}
     </span>
@@ -458,17 +568,20 @@ function ProfileCard({
   return (
     <Link
       href={href}
-      className="rounded-2xl border border-white/10 bg-[#0d0d0d] p-4  transition hover:border-red-500/30 hover:bg-white/[0.06]"
+      className="group min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 transition duration-200 hover:-translate-y-0.5 hover:border-red-500/40 hover:shadow-lg hover:shadow-red-500/5 sm:p-5"
     >
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-500/10 text-red-300">
+      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-500/10 text-red-500 transition group-hover:bg-red-500 group-hover:text-white">
         {icon}
       </div>
-
-      <p className="mt-4 text-xs font-bold uppercase tracking-wide text-white/40">
+      <p className="mt-4 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
         {label}
       </p>
-
-      <p className="mt-1 text-3xl font-black">{value}</p>
+      <p className="mt-1 break-words text-3xl font-black tabular-nums">
+        {value.toLocaleString()}
+      </p>
+      <div className="mt-3 flex items-center gap-1 text-xs font-bold text-red-500 opacity-80">
+        View details <ArrowRight size={13} />
+      </div>
     </Link>
   );
 }
@@ -483,28 +596,47 @@ function InfoCard({
   value: number;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#0d0d0d] p-4 ">
-      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-500/10 text-red-300">
+    <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5">
+      <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
         {icon}
       </div>
-
-      <p className="mt-4 text-xs font-bold uppercase tracking-wide text-white/40">
+      <p className="mt-4 text-xs font-bold uppercase tracking-wider text-[var(--muted)]">
         {label}
       </p>
-
-      <p className="mt-1 text-3xl font-black">{value}</p>
+      <p className="mt-1 break-words text-3xl font-black tabular-nums">
+        {value.toLocaleString()}
+      </p>
     </div>
   );
 }
 
-function QuickAction({ href, label }: { href: string; label: string }) {
+function QuickAction({
+  href,
+  label,
+  description,
+  icon,
+}: {
+  href: string;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+}) {
   return (
     <Link
       href={href}
-      className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/25 px-4 py-4 text-sm font-black text-white/75 transition hover:border-red-500/30 hover:text-white"
+      className="group flex min-w-0 items-center gap-4 rounded-2xl border border-[var(--border)] bg-[var(--background)] p-4 transition hover:border-red-500/40 hover:bg-[var(--surface-hover)] sm:p-5"
     >
-      {label}
-      <ArrowRight size={17} />
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-500 transition group-hover:bg-red-500 group-hover:text-white">
+        {icon}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="font-black">{label}</p>
+        <p className="mt-1 text-xs text-[var(--muted)]">{description}</p>
+      </div>
+      <ArrowRight
+        size={18}
+        className="shrink-0 text-[var(--muted)] transition group-hover:translate-x-1 group-hover:text-red-500"
+      />
     </Link>
   );
 }
@@ -523,14 +655,10 @@ function NotesPanel({
   emptyText: string;
 }) {
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5  sm:p-6">
-      <p className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.22em] text-red-300">
-        {icon}
-        Creator Notes
-      </p>
-
-      <h2 className="mt-2 text-xl font-black">{title}</h2>
-      <p className="mt-1 text-sm text-white/45">{subtitle}</p>
+    <div className="min-w-0 rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-7">
+      <SectionEyebrow icon={icon}>Creator Notes</SectionEyebrow>
+      <h2 className="mt-2 text-2xl font-black">{title}</h2>
+      <p className="mt-1 text-sm text-[var(--muted)]">{subtitle}</p>
 
       <div className="mt-5 space-y-3">
         {notes.length > 0 ? (
@@ -547,49 +675,51 @@ function NoteRow({ note }: { note: CreatorNote }) {
   return (
     <Link
       href={`/notes/${note.id}`}
-      className="block rounded-2xl border border-white/10 bg-black/25 p-4 transition hover:border-red-500/30 hover:bg-white/[0.05]"
+      className="group block min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--background)] p-4 transition hover:border-red-500/40 hover:bg-[var(--surface-hover)] sm:p-5"
     >
-      <div className="flex items-start gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-300">
-          <BookOpen size={21} />
+      <div className="flex items-start gap-3 sm:gap-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500/10 text-red-500">
+          <BookOpen size={22} />
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="mb-2 flex flex-wrap gap-2">
-            <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[10px] font-bold text-red-200">
+            <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[10px] font-bold text-red-500">
               {note.subject || "General"}
             </span>
-
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[10px] font-bold text-white/50">
+            <span className="rounded-full border border-[var(--border)] bg-[var(--card-soft)] px-2.5 py-1 text-[10px] font-bold capitalize text-[var(--muted)]">
               {note.status || "pending"}
             </span>
           </div>
 
-          <h3 className="line-clamp-2 text-sm font-black text-white">
+          <h3 className="line-clamp-2 text-base font-black text-[var(--foreground)] transition group-hover:text-red-500">
             {note.title || "Untitled Note"}
           </h3>
 
-          <p className="mt-1 line-clamp-1 text-xs text-white/45">
+          <p className="mt-1 line-clamp-1 text-xs text-[var(--muted)]">
             {note.topic || note.description || "No description"}
           </p>
 
-          <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-white/45">
-            <span className="flex items-center gap-1">
-              <Download size={13} />
-              {getDownloads(note)}
+          <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-xs font-semibold text-[var(--muted)]">
+            <span className="flex items-center gap-1.5">
+              <Download size={14} />
+              {getDownloads(note).toLocaleString()}
             </span>
-
-            <span className="flex items-center gap-1">
-              <Heart size={13} />
-              {getNumber(note.likes)}
+            <span className="flex items-center gap-1.5">
+              <Heart size={14} />
+              {getNumber(note.likes).toLocaleString()}
             </span>
-
-            <span className="flex items-center gap-1">
-              <Eye size={13} />
-              {getNumber(note.views)}
+            <span className="flex items-center gap-1.5">
+              <Eye size={14} />
+              {getNumber(note.views).toLocaleString()}
             </span>
           </div>
         </div>
+
+        <ArrowRight
+          size={17}
+          className="mt-1 shrink-0 text-[var(--muted)] transition group-hover:translate-x-1 group-hover:text-red-500"
+        />
       </div>
     </Link>
   );
@@ -597,7 +727,7 @@ function NoteRow({ note }: { note: CreatorNote }) {
 
 function EmptyBox({ text }: { text: string }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/25 p-5 text-sm leading-6 text-white/45">
+    <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--background)] p-6 text-sm leading-6 text-[var(--muted)]">
       {text}
     </div>
   );
@@ -612,7 +742,11 @@ function getDownloads(note: CreatorNote) {
 }
 
 function getCreatorScore(note: CreatorNote) {
-  return getDownloads(note) * 3 + getNumber(note.likes) * 2 + getNumber(note.views);
+  return (
+    getDownloads(note) * 3 +
+    getNumber(note.likes) * 2 +
+    getNumber(note.views)
+  );
 }
 
 function getCreatedTime(value: unknown) {
