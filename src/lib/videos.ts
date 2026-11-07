@@ -57,6 +57,59 @@ export async function getVideosPage(
   }
 }
 
+// Search approved videos using indexed search tokens.
+// Search approved videos using indexed search tokens.
+export async function searchVideosByTokens(
+  searchTokens: string[]
+): Promise<Video[]> {
+  if (searchTokens.length === 0) {
+    return [];
+  }
+
+  try {
+    const tokens = [...new Set(searchTokens)].slice(0, 30);
+
+    const searchQuery = query(
+      VIDEOS_COLLECTION,
+      where("approved", "==", true),
+      where("searchTokens", "array-contains-any", tokens),
+      limit(50)
+    );
+
+    const snapshot = await getDocs(searchQuery);
+
+    const results = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as Omit<Video, "id">),
+    }));
+
+    // Keep only videos containing EVERY search token.
+    const matchingResults = results.filter((video) =>
+      tokens.every((token) =>
+        video.searchTokens?.includes(token)
+      )
+    );
+
+    // Prioritize matches found in the title.
+    matchingResults.sort((a, b) => {
+      const aMatches = tokens.filter((token) =>
+        a.title?.toLowerCase().includes(token)
+      ).length;
+
+      const bMatches = tokens.filter((token) =>
+        b.title?.toLowerCase().includes(token)
+      ).length;
+
+      return bMatches - aMatches;
+    });
+
+    return matchingResults;
+  } catch (error) {
+    console.error("SEARCH VIDEOS ERROR:", error);
+    throw error;
+  }
+}
+
 // Retained for compatibility with any other existing pages.
 export async function getVideos(): Promise<Video[]> {
   try {

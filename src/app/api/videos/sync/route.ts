@@ -95,7 +95,7 @@ export async function GET() {
         const title = video.title || "";
         const description = video.description || "";
         const channelName =
-          video.channelName || channel.name || "";
+          channel.name || ""
 
         const isStudy = classifyVideo(
           title,

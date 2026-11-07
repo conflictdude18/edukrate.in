@@ -1,10 +1,14 @@
 
-import { initializeApp } from "firebase-admin/app";
+import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
+if (getApps().length === 0) {
+  initializeApp();
+}
 
+export { generateDailyAiNotes } from "./aiNotes";
 initializeApp();
 
 const db = getFirestore();

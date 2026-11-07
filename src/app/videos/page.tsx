@@ -14,6 +14,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import EdukratePlayer from "@/components/videos/EdukratePlayer";
 import {
   getVideosPage,
+  searchVideosByTokens,
   type VideosPage,
 } from "@/lib/videos";
 
@@ -74,6 +75,8 @@ export default function VideosPage() {
   >([]);
 
   const [youtubeLoading, setYoutubeLoading] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [localSearchResults, setLocalSearchResults] = useState<Video[]>([]);
   const [searchError, setSearchError] = useState("");
 
   const [selectedYoutubeVideo, setSelectedYoutubeVideo] =
@@ -134,7 +137,7 @@ export default function VideosPage() {
   useEffect(() => {
     const target = loadMoreRef.current;
 
-    if (!target || !hasMore || loading) return;
+    if (!target || !hasMore || loading || search.trim()) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -150,147 +153,175 @@ export default function VideosPage() {
     observer.observe(target);
 
     return () => observer.disconnect();
-  }, [hasMore, loading, loadMoreVideos]);
+  }, [hasMore, loading, loadMoreVideos, search]);
 
-  // Search and filter videos already loaded from Firestore.
-  const filteredVideos = useMemo(() => {
-    const query = search.trim().toLowerCase();
+// Search indexed Firestore videos and YouTube in parallel.
+useEffect(() => {
+  const queryText = search.trim();
 
-    const normalize = (value: unknown) =>
-      String(value ?? "")
+  if (!queryText) {
+    setLocalSearchResults([]);
+    setYoutubeResults([]);
+    setSearchLoading(false);
+    setYoutubeLoading(false);
+    setSearchError("");
+    return;
+  }
+
+  const tokens = [
+    ...new Set(
+      queryText
         .toLowerCase()
-        .replace(/[^a-z0-9]/g, "");
+        .normalize("NFKD")
+        .replace(/[^\p{L}\p{N}\s]/gu, " ")
+        .split(/\s+/)
+        .filter((word) => word.length >= 2)
+    ),
+  ].slice(0, 30);
 
-    const classAliases: Record<string, string[]> = {
-      "9": ["9", "class9", "9th", "ix", "classix"],
-      "10": ["10", "class10", "10th", "x", "classx"],
-      "11": ["11", "class11", "11th", "xi", "classxi"],
-      "12": ["12", "class12", "12th", "xii", "classxii"],
-    };
+  if (tokens.length === 0) {
+    setLocalSearchResults([]);
+    setYoutubeResults([]);
+    return;
+  }
 
-    const matchesClass = (video: Video) => {
-      if (selectedClass === "All") return true;
+  let active = true;
 
-      const classValue = normalize(video.classLevel);
-      const examValue = normalize(video.exam);
+  const timeout = setTimeout(async () => {
+    setSearchLoading(true);
+    setYoutubeLoading(queryText.length >= 3);
+    setSearchError("");
 
-      if (
-        selectedClass === "JEE" ||
-        selectedClass === "NEET"
-      ) {
-        const selected = normalize(selectedClass);
+    const localPromise = searchVideosByTokens(tokens);
 
-        return (
-          examValue.includes(selected) ||
-          classValue.includes(selected)
-        );
+    const youtubePromise =
+      queryText.length >= 3
+        ? fetch(
+            `/api/videos/search?q=${encodeURIComponent(queryText)}`
+          ).then(async (response) => {
+            const data = await response.json();
+
+            if (!response.ok) {
+              throw new Error(data.error || "YouTube search failed");
+            }
+
+            return data.results || [];
+          })
+        : Promise.resolve([]);
+
+    const [localResult, youtubeResult] =
+      await Promise.allSettled([
+        localPromise,
+        youtubePromise,
+      ]);
+
+    if (active) {
+      if (localResult.status === "fulfilled") {
+        setLocalSearchResults(localResult.value);
+      } else {
+        console.error("Firestore search failed:", localResult.reason);
+        setLocalSearchResults([]);
+        setSearchError("Could not search Edukrate videos.");
       }
 
-      const aliases = classAliases[selectedClass] ?? [
-        normalize(selectedClass),
-      ];
-
-      return aliases.some(
-        (alias) =>
-          classValue === alias ||
-          classValue.includes(alias) ||
-          examValue === alias ||
-          examValue.includes(alias)
-      );
-    };
-
-    const matchesSubject = (video: Video) => {
-      if (selectedSubject === "All") return true;
-
-      const subjectValue = normalize(video.subject);
-      const selected = normalize(selectedSubject);
-
-      return (
-        subjectValue === selected ||
-        subjectValue.includes(selected)
-      );
-    };
-
-    return videos.filter((video) => {
-      const matchesSearch =
-        !query ||
-        [
-          video.title,
-          video.channelName,
-          video.description,
-          video.chapter,
-          video.subject,
-          video.classLevel,
-          video.exam,
-        ].some((value) =>
-          String(value ?? "").toLowerCase().includes(query)
+      if (youtubeResult.status === "fulfilled") {
+        setYoutubeResults(youtubeResult.value);
+      } else {
+        console.error("YouTube search failed:", youtubeResult.reason);
+        setYoutubeResults([]);
+        setSearchError((previous) =>
+          previous
+            ? `${previous} YouTube search also failed.`
+            : "Could not search YouTube right now."
         );
-
-      return (
-        matchesSearch &&
-        matchesClass(video) &&
-        matchesSubject(video)
-      );
-    });
-  }, [videos, search, selectedClass, selectedSubject]);
-
-  // YouTube fallback search.
-  // Only search YouTube after all local videos have been loaded.
-  useEffect(() => {
-    if (
-      search.trim().length < 3 ||
-      filteredVideos.length > 0 ||
-      hasMore
-    ) {
-      setYoutubeResults([]);
-      setYoutubeLoading(false);
-      setSearchError("");
-      return;
+      }
     }
 
-    let active = true;
+    if (active) {
+      setSearchLoading(false);
+      setYoutubeLoading(false);
+    }
+  }, 450);
 
-    const timeout = setTimeout(async () => {
-      setYoutubeLoading(true);
-      setSearchError("");
+  return () => {
+    active = false;
+    clearTimeout(timeout);
+  };
+}, [search]);
 
-      try {
-        const response = await fetch(
-          `/api/videos/search?q=${encodeURIComponent(
-            search.trim()
-          )}`
-        );
+// Apply class and subject filters to the active result set.
+const filteredVideos = useMemo(() => {
+  const sourceVideos = search.trim()
+    ? localSearchResults
+    : videos;
 
-        const data = await response.json();
+  const normalize = (value: unknown) =>
+    String(value ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "");
 
-        if (!response.ok) {
-          throw new Error(data.error || "Search failed");
-        }
+  const classAliases: Record<string, string[]> = {
+    "9": ["9", "class9", "9th", "ix", "classix"],
+    "10": ["10", "class10", "10th", "x", "classx"],
+    "11": ["11", "class11", "11th", "xi", "classxi"],
+    "12": ["12", "class12", "12th", "xii", "classxii"],
+  };
 
-        if (active) {
-          setYoutubeResults(data.results || []);
-        }
-      } catch (error) {
-        console.error("YouTube search failed:", error);
+  const matchesClass = (video: Video) => {
+    if (selectedClass === "All") return true;
 
-        if (active) {
-          setYoutubeResults([]);
-          setSearchError(
-            "Could not search YouTube right now. Please try again."
-          );
-        }
-      } finally {
-        if (active) {
-          setYoutubeLoading(false);
-        }
-      }
-    }, 700);
+    const classValue = normalize(video.classLevel);
+    const examValue = normalize(video.exam);
 
-    return () => {
-      active = false;
-      clearTimeout(timeout);
-    };
-  }, [search, filteredVideos.length, hasMore]);
+    if (
+      selectedClass === "JEE" ||
+      selectedClass === "NEET"
+    ) {
+      const selected = normalize(selectedClass);
+
+      return (
+        examValue.includes(selected) ||
+        classValue.includes(selected)
+      );
+    }
+
+    const aliases = classAliases[selectedClass] ?? [
+      normalize(selectedClass),
+    ];
+
+    return aliases.some(
+      (alias) =>
+        classValue === alias ||
+        classValue.includes(alias) ||
+        examValue === alias ||
+        examValue.includes(alias)
+    );
+  };
+
+  const matchesSubject = (video: Video) => {
+    if (selectedSubject === "All") return true;
+
+    const subjectValue = normalize(video.subject);
+    const selected = normalize(selectedSubject);
+
+    return (
+      subjectValue === selected ||
+      subjectValue.includes(selected)
+    );
+  };
+
+  return sourceVideos.filter(
+    (video) =>
+      matchesClass(video) &&
+      matchesSubject(video)
+  );
+}, [
+  videos,
+  localSearchResults,
+  search,
+  selectedClass,
+  selectedSubject,
+]);
 
   function resetFilters() {
     setSearch("");
