@@ -27,10 +27,8 @@ import { db, storage } from "@/firebase/firebase";
 import { sendFollowerUploadNotifications } from "@/lib/sendFollowerUploadNotifications";
 import { updateCreatorStats } from "@/lib/updateCreatorStats";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url
-).toString();
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  "/pdf.worker.min.mjs";
 
 const boards = [
   "CBSE",

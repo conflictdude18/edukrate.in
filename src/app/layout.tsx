@@ -20,20 +20,17 @@ const geistMono = Geist_Mono({
 });
 
 const siteUrl = "https://edukrate.in";
-const siteTitle = "Edukrate — Learn. Organize. Grow.";
+
+const siteTitle =
+  "Edukrate | Study Notes, Learning Resources & AI Study Tools";
 
 const siteDescription =
-  "Edukrate is a student learning platform to discover, upload and share study notes, PDFs, assignments, previous year questions and educational resources.";
+  "Edukrate is a learning platform for students to discover study notes, educational PDFs, assignments, previous year questions, video lessons and AI-powered study assistance. Learn smarter with Edukrate.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
 
   applicationName: "Edukrate",
-
-  // Google AdSense verification
-  other: {
-    "google-adsense-account": "ca-pub-9129121205041534",
-  },
 
   title: {
     default: siteTitle,
@@ -45,22 +42,47 @@ export const metadata: Metadata = {
   keywords: [
     "Edukrate",
     "study notes",
-    "free notes",
+    "free study notes",
+    "educational resources",
+    "study material",
     "PDF notes",
-    "PYQs",
-    "assignments",
-    "student resources",
-    "revision notes",
-    "notes sharing platform",
+    "previous year questions",
+    "PYQ",
     "class notes",
+    "revision notes",
+    "student learning platform",
+    "educational videos",
+    "AI study assistant",
+    "Notique AI",
   ],
 
-  authors: [{ name: "Edukrate", url: siteUrl }],
+  authors: [
+    {
+      name: "Edukrate",
+      url: siteUrl,
+    },
+  ],
+
   creator: "Edukrate",
   publisher: "Edukrate",
 
+  category: "education",
+
+  referrer: "origin-when-cross-origin",
+
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+
   icons: {
-    icon: "/edukratelogo.png",
+    icon: [
+      {
+        url: "/edukratelogo.png",
+        type: "image/png",
+      },
+    ],
     shortcut: "/edukratelogo.png",
     apple: "/edukratelogo.png",
   },
@@ -71,41 +93,45 @@ export const metadata: Metadata = {
     googleBot: {
       index: true,
       follow: true,
-      "max-video-preview": -1,
       "max-image-preview": "large",
       "max-snippet": -1,
+      "max-video-preview": -1,
     },
   },
 
   openGraph: {
+    type: "website",
+    locale: "en_IN",
+    url: "/",
+    siteName: "Edukrate",
     title: siteTitle,
     description: siteDescription,
-    url: siteUrl,
-    siteName: "Edukrate",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Edukrate — Learn. Organize. Grow.",
+        alt: "Edukrate - Learn. Organize. Grow.",
+        type: "image/png",
       },
     ],
-    locale: "en_IN",
-    type: "website",
   },
 
   twitter: {
     card: "summary_large_image",
     title: siteTitle,
     description: siteDescription,
-    images: ["/og-image.png"],
+    images: [
+      {
+        url: "/og-image.png",
+        alt: "Edukrate - Learn. Organize. Grow.",
+      },
+    ],
   },
 
-  alternates: {
-    canonical: siteUrl,
+  other: {
+    "google-adsense-account": "ca-pub-9129121205041534",
   },
-
-  category: "education",
 };
 
 export default function RootLayout({
@@ -113,18 +139,38 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const organizationSchema = {
+  const structuredData = {
     "@context": "https://schema.org",
-    "@type": "Organization",
-    name: "Edukrate",
-    slogan: "Learn. Organize. Grow.",
-    url: siteUrl,
-    logo: `${siteUrl}/edukratelogowithname.png`,
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": `${siteUrl}/#organization`,
+        name: "Edukrate",
+        alternateName: "Edukrate Learning Platform",
+        slogan: "Learn. Organize. Grow.",
+        url: siteUrl,
+        logo: {
+          "@type": "ImageObject",
+          url: `${siteUrl}/edukratelogo.png`,
+        },
+      },
+      {
+        "@type": "WebSite",
+        "@id": `${siteUrl}/#website`,
+        name: "Edukrate",
+        alternateName: "Edukrate Learning Platform",
+        url: siteUrl,
+        publisher: {
+          "@id": `${siteUrl}/#organization`,
+        },
+        inLanguage: "en-IN",
+      },
+    ],
   };
 
   return (
     <html
-      lang="en"
+      lang="en-IN"
       data-scroll-behavior="smooth"
       className={`${geistSans.variable} ${geistMono.variable} antialiased`}
     >
@@ -139,10 +185,14 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
 
+        {/* Organization and Website structured data */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
-            __html: JSON.stringify(organizationSchema),
+            __html: JSON.stringify(structuredData).replace(
+              /</g,
+              "\\u003c"
+            ),
           }}
         />
 
