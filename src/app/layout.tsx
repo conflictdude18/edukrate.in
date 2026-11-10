@@ -213,14 +213,13 @@ export default function RootLayout({
         {/* Google AdSense Ad Blocking Recovery */}
         <Script
           id="google-adblocking-recovery"
-          strategy="afterInteractive"
           src="https://fundingchoicesmessages.google.com/i/pub-9129121205041534?ers=1"
-          async
+          strategy="beforeInteractive"
         />
 
         <Script
           id="google-fc-present"
-          strategy="afterInteractive"
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
@@ -228,9 +227,7 @@ export default function RootLayout({
                   if (!window.frames['googlefcPresent']) {
                     if (document.body) {
                       const iframe = document.createElement('iframe');
-                      iframe.style.width = '0';
-                      iframe.style.height = '0';
-                      iframe.style.border = 'none';
+                      iframe.style = 'width: 0; height: 0; border: none; z-index: -1000; left: -1000px; top: -1000px;';
                       iframe.style.display = 'none';
                       iframe.name = 'googlefcPresent';
                       document.body.appendChild(iframe);
