@@ -210,6 +210,41 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
 
+        {/* Google AdSense Ad Blocking Recovery */}
+        <Script
+          id="google-adblocking-recovery"
+          strategy="afterInteractive"
+          src="https://fundingchoicesmessages.google.com/i/pub-9129121205041534?ers=1"
+          async
+        />
+
+        <Script
+          id="google-fc-present"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                function signalGooglefcPresent() {
+                  if (!window.frames['googlefcPresent']) {
+                    if (document.body) {
+                      const iframe = document.createElement('iframe');
+                      iframe.style.width = '0';
+                      iframe.style.height = '0';
+                      iframe.style.border = 'none';
+                      iframe.style.display = 'none';
+                      iframe.name = 'googlefcPresent';
+                      document.body.appendChild(iframe);
+                    } else {
+                      setTimeout(signalGooglefcPresent, 0);
+                    }
+                  }
+                }
+                signalGooglefcPresent();
+              })();
+            `,
+          }}
+        />
+
         {/* Organization and Website structured data */}
         <script
           type="application/ld+json"
