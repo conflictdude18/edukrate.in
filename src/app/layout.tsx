@@ -22,7 +22,7 @@ const geistMono = Geist_Mono({
 const siteUrl = "https://edukrate.in";
 
 const siteTitle =
-  "Edukrate | Study Notes, Learning Resources & AI Study Tools";
+  "Edukrate – Study Notes & Learning Resources";
 
 const siteDescription =
   "Edukrate is a learning platform for students to discover study notes, educational PDFs, assignments, previous year questions, video lessons and AI-powered study assistance. Learn smarter with Edukrate.";
@@ -139,9 +139,40 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+
   const structuredData = {
     "@context": "https://schema.org",
     "@graph": [
+      {
+        "@type": "Organization",
+        "@id": `${siteUrl}/#organization`,
+        name: "Edukrate",
+        alternateName: "Edukrate Learning Platform",
+        url: `${siteUrl}/`,
+        slogan: "Learn. Organize. Grow.",
+        logo: {
+          "@type": "ImageObject",
+          "@id": `${siteUrl}/#logo`,
+          url: `${siteUrl}/edukratelogo.png`,
+          contentUrl: `${siteUrl}/edukratelogo.png`,
+          caption: "Edukrate Logo",
+        },
+      },
+      {
+        "@type": "WebSite",
+        "@id": `${siteUrl}/#website`,
+        name: "Edukrate",
+        alternateName: [
+          "Edukrate Learning Platform",
+          "edukrate.in",
+        ],
+        url: `${siteUrl}/`,
+        description: siteDescription,
+        publisher: {
+          "@id": `${siteUrl}/#organization`,
+        },
+        inLanguage: "en-IN",
+      },
       {
         "@type": "Organization",
         "@id": `${siteUrl}/#organization`,
@@ -153,17 +184,11 @@ export default function RootLayout({
           "@type": "ImageObject",
           url: `${siteUrl}/edukratelogo.png`,
         },
-      },
-      {
-        "@type": "WebSite",
-        "@id": `${siteUrl}/#website`,
-        name: "Edukrate",
-        alternateName: "Edukrate Learning Platform",
-        url: siteUrl,
-        publisher: {
-          "@id": `${siteUrl}/#organization`,
-        },
-        inLanguage: "en-IN",
+        sameAs: [
+          "https://www.instagram.com/edukrate.in/",
+          "https://www.youtube.com/@edukrate.in",
+          "https://www.linkedin.com/company/edukrate.in/",
+        ],
       },
     ],
   };
